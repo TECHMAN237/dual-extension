@@ -154,9 +154,38 @@ export interface MessageResults {
 
 export type ResultFor<M extends { type: keyof MessageResults }> = MessageResults[M["type"]];
 
-/** Typed wrapper around chrome.runtime.sendMessage with envelope unwrapping. */
-export async function sendToBackground<M extends BackgroundMessage>(message: M): Promise<ResultFor<M>> {
-  const response = (await chrome.runtime.sendMessage(message)) as Envelope<ResultFor<M>> | undefined;
+/** Maximum time the popup waits for each action before showing an error instead of spinning. */
+export const MESSAGE_TIMEOUTS_MS: Partial<Record<BackgroundMessage["type"], number>> = {
+  GET_STATE: 8_000,
+  SCAN: 30_000,
+  RESTORE: 15_000,
+  LIST_TRANSLATIONS: 8_000,
+  // Translation of a long page is batched and can legitimately take a few minutes.
+  TRANSLATE: 300_000,
+};
+const DEFAULT_MESSAGE_TIMEOUT_MS = 30_000;
+
+export class MessageTimeoutError extends Error {
+  readonly code = "timeout";
+  constructor(type: string, ms: number) {
+    super(`The extension did not answer "${type}" within ${Math.round(ms / 1000)} s. Reload the page and try again.`);
+    this.name = "MessageTimeoutError";
+  }
+}
+
+/** Race a promise against a timeout (the timer is always cleared). */
+export function withTimeout<T>(promise: Promise<T>, ms: number, onTimeout: () => Error): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(onTimeout()), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/** Typed wrapper around chrome.runtime.sendMessage with envelope unwrapping and a timeout. */
+export async function sendToBackground<M extends BackgroundMessage>(message: M, timeoutMs?: number): Promise<ResultFor<M>> {
+  const ms = timeoutMs ?? MESSAGE_TIMEOUTS_MS[message.type] ?? DEFAULT_MESSAGE_TIMEOUT_MS;
+  const response = (await withTimeout(chrome.runtime.sendMessage(message) as Promise<unknown>, ms, () => new MessageTimeoutError(message.type, ms))) as Envelope<ResultFor<M>> | undefined;
   if (!response) throw new Error("No response from the extension background worker.");
   if (!response.ok) {
     const err = new Error(response.error);

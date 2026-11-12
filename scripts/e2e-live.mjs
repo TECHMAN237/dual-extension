@@ -86,7 +86,7 @@ await page.evaluate(() => {
   };
   window.__listeners = listeners;
 });
-await page.addScriptTag({ path: path.join(root, "apps/extension/dist/src/content/index.js") });
+await page.addScriptTag({ path: path.join(root, "apps/extension/dist/src/content/content-script.js") });
 
 const result = await page.evaluate(async () => {
   const send = (msg) => new Promise((res) => window.__listeners[0](msg, {}, res));

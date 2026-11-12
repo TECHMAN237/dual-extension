@@ -94,6 +94,8 @@ export class PageSession {
     const local = detectSourceLanguage(sample, this.state.htmlLang);
     this.state.detectedLanguage = local.language;
     this.state.detectionConfidence = local.language ? local.confidence : null;
+    // The popup can display the language and element count right away.
+    this.emit();
 
     let analyzedByBackend = false;
     try {

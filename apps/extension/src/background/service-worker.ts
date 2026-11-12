@@ -1,4 +1,4 @@
-import contentScriptPath from "../content/index?script&iife";
+import contentScriptPath from "../content/content-script?script&iife";
 import { BackendClient } from "../shared/api";
 import { fail, ok, type BackgroundMessage, type Envelope, type TabMessage } from "../shared/messages";
 import { addHistoryEntry, getClientId, getSettings } from "../shared/storage";

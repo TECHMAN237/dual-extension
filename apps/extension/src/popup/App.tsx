@@ -28,10 +28,10 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const showToast = useCallback((msg: string) => {
+  const showToast = useCallback((msg: string, ms = 2200) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2200);
+    toastTimer.current = setTimeout(() => setToast(null), ms);
   }, []);
 
   // Settings + health + current tab state.
@@ -77,7 +77,7 @@ export function App() {
         const message = err instanceof Error ? err.message : String(err);
         const code = (err as { code?: string }).code;
         if (code === "unsupported_page" || code === "inject_failed" || code === "no_tab") setPageError(message);
-        else showToast(message);
+        else showToast(message, 7000);
       } finally {
         setBusy(null);
       }

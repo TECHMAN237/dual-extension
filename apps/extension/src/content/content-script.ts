@@ -1,5 +1,5 @@
 import type { Envelope, ProgressMessage, SessionSnapshot, TabMessage } from "../shared/messages";
-import { fail, ok } from "../shared/messages";
+import { fail, ok, withTimeout } from "../shared/messages";
 import { PageSession, type SessionBackend } from "./session";
 
 declare global {
@@ -9,19 +9,25 @@ declare global {
 }
 
 /** Backend proxy: all network calls go through the background service worker (extension origin). */
+/** Send to the background worker, failing after `ms` instead of waiting forever. */
+function ask<T>(message: unknown, ms: number): Promise<Envelope<T> | undefined> {
+  return withTimeout(chrome.runtime.sendMessage(message) as Promise<Envelope<T> | undefined>, ms, () => new Error("The DOUALA AI server did not answer in time."));
+}
+
 const backend: SessionBackend = {
   async translateBatch(request) {
-    const res = (await chrome.runtime.sendMessage({ type: "API_TRANSLATE_BATCH", body: request })) as Envelope<Awaited<ReturnType<SessionBackend["translateBatch"]>>>;
+    const res = await ask<Awaited<ReturnType<SessionBackend["translateBatch"]>>>({ type: "API_TRANSLATE_BATCH", body: request }, 130_000);
     if (!res?.ok) throw new Error(res?.error ?? "No response from background");
     return res.data;
   },
   async scanAnalyze(request) {
-    const res = (await chrome.runtime.sendMessage({ type: "API_SCAN_ANALYZE", body: request })) as Envelope<Awaited<ReturnType<SessionBackend["scanAnalyze"]>>>;
+    // Language detection already ran locally; the server check is only a refinement, so keep it short.
+    const res = await ask<Awaited<ReturnType<SessionBackend["scanAnalyze"]>>>({ type: "API_SCAN_ANALYZE", body: request }, 5_000);
     if (!res?.ok) throw new Error(res?.error ?? "No response from background");
     return res.data;
   },
   async sessionComplete(summary) {
-    await chrome.runtime.sendMessage({ type: "SESSION_COMPLETE", summary });
+    await ask({ type: "SESSION_COMPLETE", summary }, 5_000);
   },
 };
 

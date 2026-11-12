@@ -21,7 +21,8 @@
     "ingest": "pnpm --filter @douala-ai/backend ingest",
     "ai:test-connection": "pnpm --filter @douala-ai/backend ai:test-connection",
     "e2e:live": "node scripts/e2e-live.mjs",
-    "verify": "bash scripts/verify.sh"
+    "verify": "bash scripts/verify.sh",
+    "e2e:extension": "node apps/extension/e2e/real-extension.mjs"
   },
   "devDependencies": {
     "typescript": "^5.9.3"

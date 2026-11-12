@@ -8,4 +8,5 @@ echo "▶ tests";               pnpm -r --no-bail test
 echo "▶ build backend";       pnpm build:backend
 echo "▶ build extension";     pnpm build:extension
 echo "▶ live e2e";            node scripts/e2e-live.mjs
+echo "▶ real extension e2e";  node apps/extension/e2e/real-extension.mjs --no-backend && node apps/extension/e2e/real-extension.mjs
 echo "✔ all checks passed. Extension: apps/extension/dist — Backend: apps/backend/dist"

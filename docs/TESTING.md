@@ -9,6 +9,7 @@ pnpm typecheck            # tsc in every package/app
 pnpm test                 # vitest in every package/app
 pnpm build                # backend bundle (tsup) + extension (vite/crxjs)
 node scripts/e2e-live.mjs # live end-to-end: built content script + real backend (mock provider)
+pnpm e2e:extension        # loads the real unpacked extension in Chromium (popup → worker → page)
 scripts/verify.sh         # all of the above in sequence
 ```
 
@@ -20,9 +21,11 @@ scripts/verify.sh         # all of the above in sequence
 | `packages/linguistic-knowledge` | 2 | 16 | passed |
 | `packages/translation-engine` | 1 | 13 | passed |
 | `apps/backend` | 2 | 22 | passed |
-| `apps/extension` (vitest + jsdom, `chrome` stubbed) | 5 | 20 | passed |
-| **Unit / integration total** | **11** | **79** | **all passed** |
+| `apps/extension` (vitest + jsdom, `chrome` stubbed) | 6 | 23 | passed |
+| **Unit / integration total** | **12** | **82** | **all passed** |
 | Live end-to-end (`scripts/e2e-live.mjs`, headless Chromium + backend) | 1 | 21 checks | **21/21 passed** |
+| Real extension (`apps/extension/e2e/real-extension.mjs`, unpacked extension in Chromium) | 1 | 8 checks without server, 9 with server | **all passed** |
+| Build guard (`apps/extension/scripts/check-build.mjs`, runs on every build) | — | — | passed |
 
 Typecheck: clean in all five projects. Builds: `apps/backend/dist` (tsup, ~110 KB bundle + admin page + seed) and `apps/extension/dist` (crxjs, manifest + popup + options + service worker + IIFE content script) both succeed.
 
@@ -65,9 +68,14 @@ Starts the bundled backend (mock provider), loads a test page in headless Chromi
 
 This check found a real bug the jsdom tests missed (`setTimeout` invoked with the wrong `this` in the MutationObserver debounce threw "Illegal invocation" in Chrome). It is fixed and the check now passes 21/21.
 
+### Real extension (`apps/extension/e2e/real-extension.mjs`)
+Loads `apps/extension/dist` as an unpacked extension and sends the popup's messages (`SCAN`, `TRANSLATE`, `RESTORE`) through the **real background service worker**. Checks that Scan answers in under 6 s, detects French, counts elements, translates through the worker, restores the page, fails cleanly when the server is down, and that the popup can reach the backend (CORS). Playwright cannot click the toolbar icon, so the test grants a localhost host permission to a temporary copy of the extension only.
+
+This test was added after a user report that Scan spun for minutes. Cause: the background (`background/index.ts`) and the content script (`content/index.ts`) had the same file name, and the build's service-worker loader imported the content script instead of the background, so nothing answered the popup. The files are now `service-worker.ts` and `content-script.ts`, the build guard fails any build where the worker is not the background script, and every popup action has a timeout (Scan 30 s, Translate 5 min) so the popup shows an error instead of spinning forever.
+
 ## Not tested (honest gaps)
 
 - **Real AI providers**: no API key was available in the build environment, so Anthropic/OpenAI adapters are exercised only through typed SDK calls and error mapping; run `pnpm ai:test-connection` with your key.
 - **Supabase**: the Supabase store and repositories are implemented against the migration schema but were not executed against a live database (no credentials). The memory backend, which shares the ranking and API layers, is fully tested.
-- **Chrome extension runtime** (popup ↔ service worker ↔ tab messaging, `chrome.scripting` injection): covered by unit tests with a `chrome` stub and by the live content-script check, not by an automated test that loads the unpacked extension in a persistent Chromium profile. Manual steps are in `docs/INSTALLATION.md`.
+- **Toolbar click and `activeTab` grant**: the real-extension test cannot click the toolbar icon, so it substitutes a localhost host permission in a temporary copy. The rest of the runtime path (popup → service worker → injected content script → backend) is exercised for real.
 - The four linguistic websites from the research email were unreachable from the build environment; the ingestion pipeline is tested on synthetic HTML/CSV/JSON/text only.

@@ -69,6 +69,7 @@ douala-ai/
 | `pnpm ingest --source <id> --url <url> --lang fr` | Ingest a linguistic resource (see `docs/LINGUISTIC_RESEARCH.md`) |
 | `pnpm --filter @douala-ai/backend seed` | Seed the source registry into the configured store |
 | `pnpm e2e:live` | Live end-to-end check (built content script + backend, needs Playwright Chromium) |
+| `pnpm e2e:extension` | Loads the real unpacked extension in Chromium and runs Scan, Translate, Restore |
 | `scripts/verify.sh` | Install + typecheck + test + build + live e2e |
 
 ## Status and limitations
