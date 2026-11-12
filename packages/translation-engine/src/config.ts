@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const PROVIDER_NAMES = ["anthropic", "openai", "mock"] as const;
+export const PROVIDER_NAMES = ["anthropic", "openai", "openrouter", "mock"] as const;
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 
 /**
@@ -41,5 +41,8 @@ export const DEFAULT_MODELS: Record<ProviderName, { model: string; fastModel: st
   anthropic: { model: "claude-opus-5-5", fastModel: "claude-sonnet-5-5", fallbackModel: "claude-sonnet-5-5" },
   // Users must verify current OpenAI model ids in https://platform.openai.com/docs/models before use.
   openai: { model: "gpt-5", fastModel: "gpt-5-mini" },
+  // Free OpenRouter models, checked against https://openrouter.ai/api/v1/models (Nov 2026).
+  // ":free" variants are rate-limited; see docs/AI_CONFIGURATION.md.
+  openrouter: { model: "google/gemma-4-31b-it:free", fastModel: "google/gemma-4-31b-it:free", fallbackModel: "google/gemma-4-26b-a4b-it:free" },
   mock: { model: "mock-model", fastModel: "mock-model" },
 };

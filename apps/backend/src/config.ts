@@ -19,8 +19,9 @@ const envSchema = z.object({
   AI_BASE_URL: z.string().url().optional(),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
   AI_MAX_RETRIES: z.coerce.number().int().min(0).max(6).default(2),
-  AI_BATCH_SIZE: z.coerce.number().int().min(1).max(60).default(20),
-  AI_CONCURRENCY: z.coerce.number().int().min(1).max(16).default(3),
+  // Defaults depend on the provider (see PROVIDER_LIMIT_DEFAULTS).
+  AI_BATCH_SIZE: z.coerce.number().int().min(1).max(60).optional(),
+  AI_CONCURRENCY: z.coerce.number().int().min(1).max(16).optional(),
   AI_EFFORT: z.enum(["low", "medium", "high"]).default("low"),
   AI_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(21_600),
   AI_ANTHROPIC_SERVER_FALLBACK: bool.default(true),
@@ -43,6 +44,16 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+/**
+ * Batch size / concurrency used when AI_BATCH_SIZE / AI_CONCURRENCY are not set.
+ * OpenRouter free models are rate-limited per minute, so we send fewer, larger
+ * requests one at a time.
+ */
+const DEFAULT_LIMITS = { batchSize: 20, concurrency: 3 };
+const PROVIDER_LIMIT_DEFAULTS: Partial<Record<Env["AI_PROVIDER"], { batchSize: number; concurrency: number }>> = {
+  openrouter: { batchSize: 30, concurrency: 1 },
+};
+
 export interface AppConfig {
   env: Env;
   engine: EngineConfig;
@@ -63,7 +74,10 @@ export class ConfigError extends Error {
  * Secrets are never echoed back.
  */
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
-  const parsed = envSchema.safeParse(source);
+  // `KEY=` lines in an env file arrive as "" (Node --env-file); treat them as unset
+  // so the documented "copy .env.example and fill what you need" workflow works.
+  const cleaned = Object.fromEntries(Object.entries(source).filter(([, v]) => v !== undefined && v.trim() !== ""));
+  const parsed = envSchema.safeParse(cleaned);
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  - ${i.path.join(".") || "(root)"}: ${i.message}`);
     throw new ConfigError(`Invalid environment configuration:\n${lines.join("\n")}\nSee .env.example and docs/AI_CONFIGURATION.md.`);
@@ -89,6 +103,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const defaults = DEFAULT_MODELS[env.AI_PROVIDER];
+  const limits = PROVIDER_LIMIT_DEFAULTS[env.AI_PROVIDER] ?? DEFAULT_LIMITS;
   const engine = engineConfigSchema.parse({
     provider: env.AI_PROVIDER,
     apiKey: env.AI_API_KEY,
@@ -98,8 +113,8 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     baseUrl: env.AI_BASE_URL,
     timeoutMs: env.AI_TIMEOUT_MS,
     maxRetries: env.AI_MAX_RETRIES,
-    batchSize: env.AI_BATCH_SIZE,
-    concurrency: env.AI_CONCURRENCY,
+    batchSize: env.AI_BATCH_SIZE ?? limits.batchSize,
+    concurrency: env.AI_CONCURRENCY ?? limits.concurrency,
     cacheTtlSeconds: env.AI_CACHE_TTL_SECONDS,
     effort: env.AI_EFFORT,
     anthropicServerFallback: env.AI_ANTHROPIC_SERVER_FALLBACK,

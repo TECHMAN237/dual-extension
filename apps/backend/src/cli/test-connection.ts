@@ -13,13 +13,16 @@ async function main() {
   } catch (err) {
     if (err instanceof ConfigError) {
       console.error(err.message);
-      process.exit(1);
+      // exitCode instead of process.exit(): exiting while HTTP sockets are open
+      // crashes Node on Windows (libuv UV_HANDLE_CLOSING assertion).
+      process.exitCode = 1;
+      return;
     }
     throw err;
   }
   console.log("Configuration:", JSON.stringify(describeConfig(config), null, 2));
   if (config.engine.provider === "mock") {
-    console.log("AI_PROVIDER=mock: nothing to test. Set AI_PROVIDER=anthropic or openai with AI_API_KEY.");
+    console.log("AI_PROVIDER=mock: nothing to test. Set AI_PROVIDER=anthropic, openai or openrouter with AI_API_KEY.");
     return;
   }
   const provider = createProvider(config.engine);
@@ -32,7 +35,8 @@ async function main() {
   if (r.note) console.log(`Note: ${r.note}`);
   if (r.status === "error") {
     console.error("Connection test FAILED.");
-    process.exit(2);
+    process.exitCode = 2;
+    return;
   }
   console.log("Connection test OK.");
 }
