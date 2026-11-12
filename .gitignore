@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+apps/extension/release/
+.vite/
+.pnpm-store/
+apps/backend/data/local-knowledge.json

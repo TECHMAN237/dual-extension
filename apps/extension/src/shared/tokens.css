@@ -1,0 +1,88 @@
+/* DOUALA AI design tokens */
+:root {
+  --ink: #14110f;
+  --ink-2: #4a4440;
+  --ink-3: #847c74;
+  --paper: #fbf8f3;
+  --paper-2: #f3eee6;
+  --surface: #ffffff;
+  --line: #e6e0d8;
+  --line-strong: #d4ccc1;
+  --accent: #0f6e63;
+  --accent-strong: #0b564d;
+  --accent-soft: #e2efec;
+  --amber: #e0a458;
+  --amber-soft: #f9eedc;
+  --success: #2f7d4f;
+  --success-soft: #e3f1e8;
+  --warn: #b7791f;
+  --warn-soft: #fbf0d9;
+  --danger: #b4443d;
+  --danger-soft: #f8e4e2;
+  --info-soft: #e8eef7;
+  --shadow: 0 1px 2px rgba(20, 17, 15, 0.05), 0 6px 18px rgba(20, 17, 15, 0.06);
+  --radius: 10px;
+  --radius-sm: 7px;
+  --space: 8px;
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --transition: 150ms ease;
+  --focus: 0 0 0 3px rgba(15, 110, 99, 0.28);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #f3efe9;
+    --ink-2: #c9c2b9;
+    --ink-3: #8f877e;
+    --paper: #15130f;
+    --paper-2: #1d1a16;
+    --surface: #231f1a;
+    --line: #342f29;
+    --line-strong: #4a4239;
+    --accent: #3fa497;
+    --accent-strong: #5cc0b2;
+    --accent-soft: #1b3330;
+    --amber: #e5b06d;
+    --amber-soft: #3a2d1a;
+    --success: #5fb67f;
+    --success-soft: #1d3326;
+    --warn: #d9a24a;
+    --warn-soft: #3a2e17;
+    --danger: #e0736c;
+    --danger-soft: #3d2220;
+    --info-soft: #222a36;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 18px rgba(0, 0, 0, 0.35);
+    --focus: 0 0 0 3px rgba(63, 164, 151, 0.35);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}

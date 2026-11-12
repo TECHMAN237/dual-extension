@@ -1,0 +1,40 @@
+# Render Blueprint for the DOUALA AI backend.
+# Deploy: New → Blueprint → select this repository. Fill the secret env vars in the dashboard.
+services:
+  - type: web
+    name: douala-ai-backend
+    runtime: node
+    plan: starter
+    rootDir: .
+    buildCommand: corepack enable && corepack prepare pnpm@10.28.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build
+    startCommand: pnpm --filter @douala-ai/backend start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: AI_PROVIDER
+        value: anthropic
+      - key: AI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: claude-opus-5-5
+      - key: AI_FAST_MODEL
+        value: claude-sonnet-5-5
+      - key: AI_FALLBACK_MODEL
+        value: claude-sonnet-5-5
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_API_TOKEN
+        generateValue: true
+      - key: EXTENSION_ACCESS_TOKEN
+        generateValue: true
+      - key: CORS_ALLOWED_ORIGINS
+        value: chrome-extension://*
+      - key: RATE_LIMIT_MAX
+        value: "60"
+      - key: LOG_LEVEL
+        value: info

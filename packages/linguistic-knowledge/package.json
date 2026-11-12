@@ -1,0 +1,29 @@
+{
+  "name": "@douala-ai/linguistic-knowledge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@douala-ai/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.86.0",
+    "cheerio": "^1.1.2",
+    "csv-parse": "^6.1.0",
+    "pdf-parse": "^2.4.5",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.6"
+  }
+}

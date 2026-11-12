@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DOUALA AI – Linguistic administration</title>
+<style>
+  :root { --ink:#14110F; --paper:#FBF8F3; --muted:#6B645C; --line:#E6E0D8; --teal:#0F6E63; --amber:#E0A458; --ok:#2E7D32; --bad:#B3261E; --card:#fff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 14px/1.5 Inter, system-ui, sans-serif; color:var(--ink); background:var(--paper); }
+  header { display:flex; align-items:center; gap:16px; padding:16px 24px; border-bottom:1px solid var(--line); background:#fff; position:sticky; top:0; }
+  header h1 { font-size:14px; letter-spacing:.18em; text-transform:uppercase; margin:0; }
+  header small { color:var(--muted); }
+  main { max-width:1100px; margin:0 auto; padding:24px; display:grid; gap:20px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; }
+  input, select, textarea, button { font:inherit; }
+  input, select, textarea { padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:#fff; width:100%; }
+  button { padding:7px 12px; border-radius:8px; border:1px solid var(--teal); background:var(--teal); color:#fff; cursor:pointer; }
+  button.ghost { background:#fff; color:var(--teal); }
+  button.danger { background:#fff; color:var(--bad); border-color:var(--bad); }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .row > label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); min-width:160px; flex:1; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; border:1px solid var(--line); }
+  .badge.pending { background:#FFF4E0; border-color:var(--amber); }
+  .badge.verified, .badge.approved { background:#E7F3E8; border-color:var(--ok); }
+  .badge.rejected { background:#FBE9E7; border-color:var(--bad); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; }
+  .stat { border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .stat b { display:block; font-size:20px; }
+  .stat span { color:var(--muted); font-size:12px; }
+  #status { color:var(--muted); font-size:12px; }
+  .warn { background:#FFF4E0; border:1px solid var(--amber); border-radius:8px; padding:8px 12px; font-size:13px; }
+  pre { background:#F4F1EC; padding:10px; border-radius:8px; overflow:auto; font-size:12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>DOUALA AI · Administration</h1>
+  <small>Linguistic sources, knowledge review, community corrections, usage</small>
+  <span style="flex:1"></span>
+  <label style="font-size:12px;color:var(--muted)">Admin token <input id="token" type="password" placeholder="ADMIN_API_TOKEN (optional on localhost)" style="width:260px;display:inline-block"/></label>
+  <button id="connect">Connect</button>
+</header>
+<main>
+  <div id="status">Not connected.</div>
+  <section id="overview"><h2>Overview</h2><div class="stats" id="stats"></div></section>
+  <section>
+    <h2>Linguistic sources</h2>
+    <p class="warn">Sources are treated as untrusted data. Verify licensing and terms of use before ingesting. Everything ingested automatically is stored as <em>pending</em> until a linguist approves it.</p>
+    <table id="sources"><thead><tr><th>Id</th><th>Name</th><th>Type</th><th>Reliability</th><th>Access</th><th>Ingestion</th><th>URL</th></tr></thead><tbody></tbody></table>
+    <h3 style="font-size:13px;margin:16px 0 6px">Add or update a source</h3>
+    <div class="row">
+      <label>Id <input id="s-id" placeholder="my-dictionary"/></label>
+      <label>Name <input id="s-name"/></label>
+      <label>URL <input id="s-url" placeholder="https://"/></label>
+      <label>Type <select id="s-type"><option>online_dictionary</option><option>bilingual_dictionary</option><option>grammar</option><option>translation_platform</option><option>academic_publication</option><option>corpus</option><option>vocabulary_database</option><option>educational</option><option>manual_entry</option><option>community</option><option>other</option></select></label>
+      <label>Reliability <select id="s-rel"><option>unknown</option><option>community</option><option>established</option><option>institutional</option><option>academic</option></select></label>
+      <label>Licence <input id="s-lic"/></label>
+      <button id="s-save">Save source</button>
+    </div>
+    <h3 style="font-size:13px;margin:16px 0 6px">Ingest from URL (HTML / PDF / CSV / JSON)</h3>
+    <div class="row">
+      <label>Source id <input id="i-source"/></label>
+      <label>URL <input id="i-url" placeholder="https://example.org/dictionary?letter=A"/></label>
+      <label>Source language of the page headwords <select id="i-lang"><option value="fr">French → Douala</option><option value="en">English → Douala</option></select></label>
+      <label>HTML strategy <select id="i-strategy"><option value="auto">auto</option><option value="table">table</option><option value="dl">definition list</option><option value="lines">"word — meaning" lines</option></select></label>
+      <label>Source column (tables) <input id="i-scol" type="number" value="0"/></label>
+      <label>Target column (tables) <input id="i-tcol" type="number" value="1"/></label>
+      <button class="ghost" id="i-dry">Dry run</button>
+      <button id="i-run">Ingest</button>
+    </div>
+    <pre id="i-out" hidden></pre>
+    <h3 style="font-size:13px;margin:16px 0 6px">Import vocabulary manually (JSON array)</h3>
+    <div class="row">
+      <label style="flex:3">Entries <textarea id="m-json" rows="4" placeholder='[{"sourceLanguage":"fr","sourceText":"Bonjour","targetText":"...","category":"expression","reference":"Helmlinger 1972, p. 12"}]'></textarea></label>
+      <label>Source id <input id="m-source" value="manual-linguist-entries"/></label>
+      <button id="m-run">Import</button>
+    </div>
+  </section>
+  <section>
+    <h2>Knowledge review</h2>
+    <div class="row"><label>Status <select id="k-status"><option value="pending">pending</option><option value="verified">verified</option><option value="rejected">rejected</option><option value="">all</option></select></label><button class="ghost" id="k-load">Load</button></div>
+    <table id="knowledge"><thead><tr><th>Source text</th><th>Target</th><th>Category</th><th>Origin</th><th>Source</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+  </section>
+  <section>
+    <h2>Community corrections</h2>
+    <div class="row"><label>Status <select id="c-status"><option value="pending">pending</option><option value="approved">approved</option><option value="rejected">rejected</option><option value="">all</option></select></label><button class="ghost" id="c-load">Load</button></div>
+    <table id="corrections"><thead><tr><th>Original</th><th>AI translation</th><th>Proposed</th><th>Explanation</th><th>Context</th><th>Status</th><th></th></tr></thead><tbody></tbody></table>
+  </section>
+  <section>
+    <h2>Translation usage (last 7 days)</h2>
+    <div class="stats" id="usage"></div>
+    <table id="usage-models"><thead><tr><th>Model</th><th>Requests</th><th>Items</th><th>Input tokens</th><th>Output tokens</th></tr></thead><tbody></tbody></table>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+  const status = (m, bad) => { const el = $("#status"); el.textContent = m; el.style.color = bad ? "var(--bad)" : "var(--muted)"; };
+  const token = () => $("#token").value.trim();
+  async function api(path, opts = {}) {
+    const headers = { "content-type": "application/json" };
+    if (token()) headers["x-admin-token"] = token();
+    const res = await fetch(path, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error?.message || `HTTP ${res.status}`);
+    return json;
+  }
+  async function loadOverview() {
+    const o = await api("/api/admin/overview");
+    $("#stats").innerHTML = [
+      ["Provider", o.provider + (o.model ? " · " + o.model : " (mock)")],
+      ["Storage", o.storage],
+      ["Knowledge entries", o.knowledgeEntries],
+      ["Sources", o.sources],
+      ["Pending knowledge", o.hasPendingKnowledge ? "yes" : "no"],
+      ["Pending corrections", o.hasPendingCorrections ? "yes" : "no"],
+      ["Cache entries", o.cacheSize],
+    ].map(([k, v]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("");
+  }
+  async function loadSources() {
+    const { sources } = await api("/api/admin/sources");
+    $("#sources tbody").innerHTML = sources.map((s) => `<tr><td><code>${esc(s.id)}</code></td><td>${esc(s.name)}<br><small style="color:var(--muted)">${esc(s.notes || "")}</small></td><td>${esc(s.type)}</td><td>${esc(s.reliability)}</td><td>${esc(s.accessibility)}</td><td><span class="badge">${esc(s.ingestionStatus)}</span></td><td>${s.url ? `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">link</a>` : "—"}</td></tr>`).join("");
+  }
+  async function loadKnowledge() {
+    const st = $("#k-status").value;
+    const { entries } = await api(`/api/admin/knowledge?limit=200${st ? `&status=${st}` : ""}`);
+    $("#knowledge tbody").innerHTML = entries.map((e) => `<tr data-id="${esc(e.id)}"><td>${esc(e.sourceText)}<br><small style="color:var(--muted)">${esc(e.sourceLanguage)} → ${esc(e.targetLanguage)}${e.context ? " · " + esc(e.context) : ""}</small></td><td>${e.targetText ? esc(e.targetText) : "<em style='color:var(--muted)'>no translation yet</em>"}</td><td>${esc(e.category)}</td><td>${esc(e.origin)}</td><td>${esc(e.sourceName)}${e.reference ? "<br><small>" + esc(e.reference) + "</small>" : ""}</td><td><span class="badge ${esc(e.validationStatus)}">${esc(e.validationStatus)}</span></td><td>${e.targetText ? `<button data-act="verified">Verify</button> ` : ""}<button class="danger" data-act="rejected">Reject</button></td></tr>`).join("");
+  }
+  async function loadCorrections() {
+    const st = $("#c-status").value;
+    const { corrections } = await api(`/api/admin/corrections?limit=200${st ? `&status=${st}` : ""}`);
+    $("#corrections tbody").innerHTML = corrections.map((c) => `<tr data-id="${esc(c.id)}"><td>${esc(c.sourceText)}<br><small style="color:var(--muted)">${esc(c.sourceLanguage)} · ${esc(c.domain || "")}</small></td><td>${esc(c.aiTranslation || "—")}</td><td><b>${esc(c.proposedTranslation)}</b></td><td>${esc(c.explanation || "")}</td><td>${esc(c.context)}</td><td><span class="badge ${esc(c.status)}">${esc(c.status)}</span>${c.reviewNote ? "<br><small>" + esc(c.reviewNote) + "</small>" : ""}</td><td>${c.status === "pending" ? `<button data-act="approved">Approve</button> <button class="danger" data-act="rejected">Reject</button>` : ""}</td></tr>`).join("");
+  }
+  async function loadUsage() {
+    const { usage } = await api("/api/admin/usage?days=7");
+    $("#usage").innerHTML = [["Requests", usage.requests], ["Failures", usage.failures], ["Segments", usage.items], ["Input tokens", usage.inputTokens], ["Output tokens", usage.outputTokens]].map(([k, v]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join("");
+    $("#usage-models tbody").innerHTML = Object.entries(usage.byModel).map(([m, v]) => `<tr><td>${esc(m)}</td><td>${v.requests}</td><td>${v.items}</td><td>${v.inputTokens}</td><td>${v.outputTokens}</td></tr>`).join("");
+  }
+  async function loadAll() {
+    try { await Promise.all([loadOverview(), loadSources(), loadKnowledge(), loadCorrections(), loadUsage()]); status("Connected."); }
+    catch (e) { status("Error: " + e.message, true); }
+  }
+  $("#connect").onclick = loadAll;
+  $("#k-load").onclick = () => loadKnowledge().catch((e) => status(e.message, true));
+  $("#c-load").onclick = () => loadCorrections().catch((e) => status(e.message, true));
+  $("#knowledge").addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button[data-act]"); if (!b) return;
+    const id = b.closest("tr").dataset.id;
+    try { await api(`/api/admin/knowledge/${id}/review`, { method: "POST", body: { status: b.dataset.act } }); await loadKnowledge(); await loadOverview(); } catch (e) { status(e.message, true); }
+  });
+  $("#corrections").addEventListener("click", async (ev) => {
+    const b = ev.target.closest("button[data-act]"); if (!b) return;
+    const id = b.closest("tr").dataset.id;
+    const note = prompt("Review note (optional)") || undefined;
+    try { await api(`/api/admin/corrections/${id}/review`, { method: "POST", body: { decision: b.dataset.act, note } }); await loadCorrections(); await loadOverview(); } catch (e) { status(e.message, true); }
+  });
+  $("#s-save").onclick = async () => {
+    const id = $("#s-id").value.trim(); if (!id) return status("Source id required", true);
+    try {
+      await api(`/api/admin/sources/${encodeURIComponent(id)}`, { method: "PUT", body: { id, name: $("#s-name").value || id, url: $("#s-url").value || null, type: $("#s-type").value, reliability: $("#s-rel").value, languages: ["dua"], accessibility: "unknown", license: $("#s-lic").value || null, notes: null, ingestionStatus: "not_ingested", lastIngestedAt: null } });
+      await loadSources(); status("Source saved.");
+    } catch (e) { status(e.message, true); }
+  };
+  const ingest = async (dryRun) => {
+    const out = $("#i-out"); out.hidden = false; out.textContent = "Working…";
+    try {
+      const r = await api("/api/admin/ingest/url", { method: "POST", body: { sourceId: $("#i-source").value.trim(), url: $("#i-url").value.trim(), sourceLanguage: $("#i-lang").value, dryRun, html: { strategy: $("#i-strategy").value, sourceColumn: Number($("#i-scol").value), targetColumn: Number($("#i-tcol").value) } } });
+      out.textContent = JSON.stringify(r, null, 2); if (!dryRun) { await loadKnowledge(); await loadSources(); await loadOverview(); }
+    } catch (e) { out.textContent = "Error: " + e.message; }
+  };
+  $("#i-dry").onclick = () => ingest(true);
+  $("#i-run").onclick = () => ingest(false);
+  $("#m-run").onclick = async () => {
+    try {
+      const entries = JSON.parse($("#m-json").value);
+      const r = await api("/api/knowledge/ingest", { method: "POST", body: { sourceId: $("#m-source").value.trim(), entries } });
+      status(`Imported ${r.ingested} entries.`); await loadKnowledge(); await loadOverview();
+    } catch (e) { status(e.message, true); }
+  };
+  loadAll();
+})();
+</script>
+</body>
+</html>
