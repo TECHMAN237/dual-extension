@@ -13,7 +13,21 @@ The long-term vision is to make the internet accessible in African languages; ve
 - **Secrets stay on the server.** The extension never holds an AI key. The backend validates its configuration on startup, rate-limits, validates every input and output, and talks to Anthropic/OpenAI through swappable adapters.
 - **Humans in the loop.** Extracted entries and user corrections are *pending* until a linguist approves them in the admin page.
 
-## Quick start (5 minutes, no API key)
+## Using it (online server)
+
+The backend runs on Render with its data in Supabase (`render.yaml`, `docs/DEPLOYMENT.md`); the extension uses it by default, so no local server is needed:
+
+```bash
+pnpm install
+cp apps/extension/.env.production.example apps/extension/.env.production   # VITE_DEFAULT_BACKEND_URL = Render URL
+pnpm build:extension                                                       # → apps/extension/dist
+```
+
+Load `apps/extension/dist` in Chrome (below). On Render's free plan the first request after 15 minutes of inactivity wakes the server (≈ 30–60 s); the popup shows *Réveil du serveur…* meanwhile.
+
+## Quick start for development (5 minutes, no API key)
+
+`pnpm dev:backend` is only for development: it runs the backend on your machine.
 
 ```bash
 pnpm install
@@ -56,13 +70,13 @@ douala-ai/
 | `docs/API.md` | REST endpoints and payloads |
 | `docs/SECURITY.md` | Trust boundaries and controls |
 | `docs/TESTING.md` | What is tested and how to run it |
-| `docs/DEPLOYMENT.md` | Local and cloud (Render + Supabase) modes |
+| `docs/DEPLOYMENT.md` | Production (Render + Supabase, extension default URL) and development modes |
 
 ## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm dev:backend` | Backend with hot reload (reads `apps/backend/.env`) |
+| `pnpm dev:backend` | Development only: local backend with hot reload (reads `apps/backend/.env`). Not needed with the Render server |
 | `pnpm build:extension` / `pnpm dev:extension` | Build (or watch-build) the extension into `apps/extension/dist` |
 | `pnpm typecheck` · `pnpm test` · `pnpm build` | Workspace-wide checks |
 | `pnpm ai:test-connection` | Verify the configured AI provider |

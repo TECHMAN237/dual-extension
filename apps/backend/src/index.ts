@@ -1,5 +1,6 @@
 import { buildApp } from "./app";
 import { ConfigError, describeConfig, loadConfig } from "./config";
+import { seedIfEmpty } from "./seed";
 
 async function main() {
   let config;
@@ -12,7 +13,7 @@ async function main() {
     }
     throw err;
   }
-  const { app } = await buildApp(config);
+  const { app, container } = await buildApp(config);
   app.log.info(describeConfig(config), "configuration loaded");
   if (config.engine.provider === "mock") {
     app.log.warn("AI_PROVIDER=mock: translations are placeholders, NOT Douala. Configure AI_PROVIDER/AI_API_KEY for real translations.");
@@ -22,6 +23,12 @@ async function main() {
   } catch (err) {
     app.log.error(err);
     process.exit(1);
+  }
+  // After listen, so a sleeping free-tier instance answers /api/health as fast as possible.
+  if (config.storage === "supabase" && config.env.SEED_UI_TERMS) {
+    seedIfEmpty(container.store)
+      .then((seeded) => seeded && app.log.info(seeded, "empty Supabase database seeded (sources + UI terms)"))
+      .catch((err) => app.log.error({ err }, "could not seed Supabase: check that supabase/migrations/0001_initial.sql was run"));
   }
   const shutdown = async (signal: string) => {
     app.log.info({ signal }, "shutting down");

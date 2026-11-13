@@ -207,11 +207,17 @@ do $$ declare t text; begin
   end loop;
 end $$;
 
--- Keep source_text_normalized in sync when rows are written directly in SQL.
+-- Fill source_text_normalized when rows are written directly in SQL.
+-- The backend always sends its own value (normalizeForLookup in packages/shared), which
+-- keeps letters such as œ/æ that this SQL approximation would drop, so it is never overwritten.
 create or replace function normalize_source_text() returns trigger language plpgsql as $$
 begin
-  new.source_text_normalized = regexp_replace(lower(unaccent_safe(new.source_text)), '[^a-z0-9'' ]+', ' ', 'g');
-  new.source_text_normalized = btrim(regexp_replace(new.source_text_normalized, '\s+', ' ', 'g'));
+  if new.source_text_normalized is null or new.source_text_normalized = ''
+     or (tg_op = 'UPDATE' and new.source_text is distinct from old.source_text
+         and new.source_text_normalized is not distinct from old.source_text_normalized) then
+    new.source_text_normalized = regexp_replace(lower(unaccent_safe(new.source_text)), '[^a-z0-9'' ]+', ' ', 'g');
+    new.source_text_normalized = btrim(regexp_replace(new.source_text_normalized, '\s+', ' ', 'g'));
+  end if;
   return new;
 end $$;
 create or replace function unaccent_safe(t text) returns text language plpgsql immutable as $$
@@ -247,3 +253,10 @@ create policy knowledge_verified_public_read on linguistic_knowledge for select 
 
 -- No policies on corrections / reviews / votes / history / settings / usage:
 -- with RLS enabled and no policy, anon and authenticated roles get no access.
+
+-- The backend connects with the service_role key. Grant it explicitly in case the
+-- project does not apply Supabase's default privileges to new tables. service_role
+-- bypasses RLS and is used only by the backend (never in the extension).
+grant usage on schema public to service_role;
+grant select, insert, update, delete on all tables in schema public to service_role;
+grant usage, select on all sequences in schema public to service_role;

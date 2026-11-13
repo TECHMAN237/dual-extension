@@ -1,7 +1,7 @@
 // Post-build guard: verifies that dist/ is a loadable extension whose service worker
 // really is the background script (a file-name collision once made the loader import
 // the content script instead, so the popup waited forever).
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -38,4 +38,17 @@ if (!content.includes("createTreeWalker")) fail(`${injected} is not the content 
 for (const page of [manifest.action?.default_popup, manifest.options_page]) {
   if (!page || !existsSync(path.join(dist, page))) fail(`page ${page} missing`);
 }
-console.log(`check-build: OK (worker ${manifest.background.service_worker} → injects ${injected})`);
+// The default backend from apps/extension/.env.production must be baked into the bundle.
+let backendNote = "default backend http://localhost:8787 (no apps/extension/.env.production)";
+const envFile = path.resolve(dist, "../.env.production");
+if (existsSync(envFile)) {
+  const url = readFileSync(envFile, "utf8")
+    .match(/^\s*VITE_DEFAULT_BACKEND_URL\s*=\s*["']?([^"'\s#]+)/m)?.[1]
+    ?.replace(/\/+$/, "");
+  if (url) {
+    const jsFiles = (dir) => readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? jsFiles(path.join(dir, e.name)) : e.name.endsWith(".js") ? [path.join(dir, e.name)] : []));
+    if (!jsFiles(dist).some((f) => readFileSync(f, "utf8").includes(url))) fail(`VITE_DEFAULT_BACKEND_URL (${url}) from .env.production is not in the bundle`);
+    backendNote = `default backend ${url}`;
+  }
+}
+console.log(`check-build: OK (worker ${manifest.background.service_worker} → injects ${injected}; ${backendNote})`);

@@ -131,6 +131,70 @@ describe("popup", () => {
     expect(screen.getByTestId("scan-button")).toBeDisabled();
   });
 
+  it("shows the detected language in the 'From' selector after a scan (and keeps it in the Website card)", async () => {
+    mockFetchHealth();
+    const state = { session: snapshot() };
+    mockBackground(state);
+    render(<App />);
+    const option = await screen.findByTestId("auto-detect-option");
+    // Before any scan: plain label.
+    await screen.findByText("example.com");
+    expect(option).toHaveTextContent(/^Auto detect$/);
+
+    // Scan detects English.
+    await userEvent.click(screen.getByTestId("scan-button"));
+    await waitFor(() => expect(screen.getByTestId("auto-detect-option")).toHaveTextContent("Auto detect · English"));
+    expect(screen.getByTestId("detected-language")).toHaveTextContent("English");
+    expect((screen.getByLabelText("From") as HTMLSelectElement).value).toBe("auto");
+
+    // A French page.
+    chromeMock.emit({ type: "PROGRESS", state: snapshot({ status: "scanned", detectedLanguage: "fr", detectionConfidence: "high", totalSegments: 8 }) });
+    await waitFor(() => expect(screen.getByTestId("auto-detect-option")).toHaveTextContent("Auto detect · French"));
+    expect(screen.getByTestId("detected-language")).toHaveTextContent("French");
+
+    // Scanned, but the language could not be detected.
+    chromeMock.emit({ type: "PROGRESS", state: snapshot({ status: "scanned", detectedLanguage: null, totalSegments: 3 }) });
+    await waitFor(() => expect(screen.getByTestId("auto-detect-option")).toHaveTextContent("Auto detect · inconnue"));
+  });
+
+  it("shows 'Réveil du serveur…' instead of Offline while a cloud server wakes up", async () => {
+    chromeMock.store.settings = { backendUrl: "https://douala-ai-backend.onrender.com" };
+    chromeMock.store.settingsVersion = 2;
+    const okBody = JSON.stringify({ status: "ok", version: "0.1.0", provider: "openrouter", model: "google/gemma-4-31b-it:free", mock: false, storage: "supabase", knowledgeEntries: 48, uptimeSeconds: 1 });
+    const fetchMock = vi.fn().mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValue(new Response(okBody, { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    mockBackground({ session: snapshot() });
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId("connection-status")).toHaveTextContent("Réveil du serveur…"));
+    expect(screen.getByTestId("connection-status")).not.toHaveTextContent("Offline");
+    await waitFor(() => expect(screen.getByTestId("connection-status")).toHaveTextContent("Connected"), { timeout: 6000 });
+    expect(String(fetchMock.mock.calls[0]![0])).toBe("https://douala-ai-backend.onrender.com/api/health");
+  }, 10_000);
+
+  it("explains a slow first translation while the server wakes up", async () => {
+    chromeMock.store.settings = { backendUrl: "https://douala-ai-backend.onrender.com" };
+    chromeMock.store.settingsVersion = 2;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise(() => undefined))); // health never answers yet
+    const state = { session: snapshot() };
+    const sendMessage = mockBackground(state);
+    let finishTranslate!: () => void;
+    const base = sendMessage.getMockImplementation() as (message: { type: string }) => Promise<unknown>;
+    sendMessage.mockImplementation(async (message: { type: string }) => {
+      if (message.type !== "TRANSLATE") return base(message);
+      await new Promise<void>((r) => (finishTranslate = r));
+      return base(message);
+    });
+    render(<App />);
+    await userEvent.click(await screen.findByTestId("scan-button"));
+    await waitFor(() => expect(screen.getByTestId("translate-button")).toBeEnabled());
+    await userEvent.click(screen.getByTestId("translate-button"));
+    expect(screen.queryByTestId("wake-notice")).toBeNull();
+    await waitFor(() => expect(screen.getByTestId("wake-notice")).toHaveTextContent("Réveil du serveur, la première traduction peut prendre une minute"), { timeout: 6000 });
+    finishTranslate();
+    await waitFor(() => expect(screen.getByTestId("progress-panel")).toHaveTextContent("Translation complete"));
+    expect(screen.queryByTestId("wake-notice")).toBeNull();
+  }, 12_000);
+
   it("applies PROGRESS messages from the content script", async () => {
     mockFetchHealth();
     mockBackground({ session: snapshot() });

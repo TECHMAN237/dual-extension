@@ -63,7 +63,10 @@ export interface ScanResult {
   detectedLanguage: SourceLanguageCode | null;
   detectionConfidence: "high" | "medium" | "low" | null;
   totalSegments: number;
-  /** Whether the backend analysis was reachable. */
+  /**
+   * Always false in the scan answer: the scan never waits for the server. The server check
+   * runs in the background and, if it answers, refines the language through a PROGRESS update.
+   */
   analyzedByBackend: boolean;
 }
 

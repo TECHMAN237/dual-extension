@@ -30,6 +30,8 @@ const envSchema = z.object({
   SUPABASE_ANON_KEY: z.string().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
   DATABASE_URL: z.string().optional(),
+  /** Production only: accept in-memory storage (data lost on every restart). For short tests. */
+  ALLOW_EPHEMERAL_STORAGE: bool.default(false),
 
   CORS_ALLOWED_ORIGINS: z.string().default("chrome-extension://*"),
   EXTENSION_ACCESS_TOKEN: z.string().optional(),
@@ -97,6 +99,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   }
   if (env.NODE_ENV === "production" && env.AI_PROVIDER === "mock") {
     problems.push("AI_PROVIDER=mock is not allowed in production. Configure a real provider.");
+  }
+  if (env.NODE_ENV === "production" && supabaseVars === 0 && !env.ALLOW_EPHEMERAL_STORAGE) {
+    problems.push(
+      "SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production: hosts such as Render's free plan wipe the disk on restart, so validated words and corrections would be lost. See docs/DEPLOYMENT.md (set ALLOW_EPHEMERAL_STORAGE=true only for a throw-away test).",
+    );
   }
   if (problems.length > 0) {
     throw new ConfigError(`Configuration problems:\n${problems.map((p) => `  - ${p}`).join("\n")}`);

@@ -86,6 +86,25 @@ describe("loadConfig", () => {
   it("rejects mock provider and missing admin token in production", () => {
     expect(() => loadConfig({ NODE_ENV: "production", AI_PROVIDER: "mock" })).toThrow(/production/);
   });
+  it("requires Supabase in production unless ephemeral storage is explicitly allowed", () => {
+    const prod = { NODE_ENV: "production", AI_PROVIDER: "openrouter", AI_API_KEY: "sk-or-test", ADMIN_API_TOKEN: "admin" };
+    expect(() => loadConfig(prod)).toThrow(/SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production/);
+    expect(loadConfig({ ...prod, SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service" }).storage).toBe("supabase");
+    expect(loadConfig({ ...prod, ALLOW_EPHEMERAL_STORAGE: "true" }).storage).toBe("memory");
+  });
+  it("accepts the production settings of render.yaml (with the dashboard secrets filled in)", () => {
+    const yaml = readFileSync(fileURLToPath(new URL("../../../render.yaml", import.meta.url)), "utf8");
+    const env: Record<string, string> = {};
+    for (const m of yaml.matchAll(/- key: (\w+)\n\s+value: "?([^"\n]+)"?/g)) env[m[1]!] = m[2]!;
+    expect(env).toMatchObject({ NODE_ENV: "production", AI_PROVIDER: "openrouter", NODE_VERSION: "22.12.0" });
+    expect(env.EXTENSION_ACCESS_TOKEN).toBeUndefined();
+    const c = loadConfig({ ...env, AI_API_KEY: "sk-or-x", SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service", ADMIN_API_TOKEN: "generated" });
+    expect(c.engine.model).toBe("google/gemma-4-31b-it:free");
+    expect(c.engine.fallbackModel).toBe("google/gemma-4-26b-a4b-it:free");
+    expect(c.engine.baseUrl).toBe("https://openrouter.ai/api/v1");
+    expect(c.corsOrigins).toEqual(["chrome-extension://egmamnfapihdpbmnamooaabbafmncpbh"]);
+    expect(c.storage).toBe("supabase");
+  });
   it("never includes secrets in the config description", () => {
     const c = loadConfig(testEnv({ AI_PROVIDER: "openai", AI_API_KEY: "sk-secret-value", ADMIN_API_TOKEN: "admin-secret" }));
     const described = JSON.stringify(describeConfig(c));

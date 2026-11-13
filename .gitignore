@@ -11,3 +11,6 @@ apps/extension/release/
 .vite/
 .pnpm-store/
 apps/backend/data/local-knowledge.json
+!.env.production.example
+# Extension build config (copy from apps/extension/.env.production.example)
+apps/extension/.env.production

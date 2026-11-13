@@ -18,6 +18,18 @@ function languageLabel(code: string | null): string {
   return getLanguage(code)?.name ?? code;
 }
 
+/**
+ * Label of the "Auto detect" option: plain before any scan, then the detected language
+ * ("Auto detect · French") or "Auto detect · inconnue" when detection failed.
+ */
+export function autoDetectLabel(session: SessionSnapshot | null): string {
+  const status = session?.status ?? "idle";
+  if (!session || status === "idle") return "Auto detect";
+  // While the scan is still collecting text, there is nothing to show yet.
+  if (status === "scanning" && session.detectedLanguage === null) return "Auto detect";
+  return `Auto detect · ${session.detectedLanguage ? languageLabel(session.detectedLanguage) : "inconnue"}`;
+}
+
 export function TranslatePanel({ session, pageError, busy, sourceLanguage, onSourceLanguageChange, onScan, onTranslate, onRestore }: Props) {
   const status = session?.status ?? "idle";
   const scanned = session !== null && session.totalSegments > 0 && status !== "idle";
@@ -65,7 +77,9 @@ export function TranslatePanel({ session, pageError, busy, sourceLanguage, onSou
           <div className="field">
             <label htmlFor="source-language">From</label>
             <select id="source-language" className="select" value={sourceLanguage} onChange={(e) => onSourceLanguageChange(e.target.value as SourceLanguageSelection)} disabled={translating}>
-              <option value="auto">Auto detect</option>
+              <option value="auto" data-testid="auto-detect-option">
+                {autoDetectLabel(session)}
+              </option>
               <option value="en">English</option>
               <option value="fr">French</option>
             </select>

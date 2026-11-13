@@ -1,7 +1,21 @@
 import { useEffect, useState } from "react";
-import { BackendClient } from "../shared/api";
+import { BackendClient, healthWithWakeUp } from "../shared/api";
 import { Banner, Button } from "../popup/components/ui";
-import { DEFAULT_SETTINGS, MAX_HISTORY, clearAllLocalData, getClientId, getSettings, saveSettings, validateSettings, type Settings } from "../shared/storage";
+import {
+  DEFAULT_BACKEND_URL,
+  DEFAULT_SETTINGS,
+  LOCAL_BACKEND_URL,
+  MAX_HISTORY,
+  PRODUCTION_BACKEND_URL,
+  clearAllLocalData,
+  getClientId,
+  getSettings,
+  isLocalBackend,
+  normalizeBackendUrl,
+  saveSettings,
+  validateSettings,
+  type Settings,
+} from "../shared/storage";
 
 function Toggle({ id, label, help, checked, onChange }: { id: string; label: string; help?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -23,7 +37,7 @@ export function Options() {
   const [loaded, setLoaded] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
-  const [test, setTest] = useState<{ kind: "idle" } | { kind: "testing" } | { kind: "ok"; message: string } | { kind: "error"; message: string }>({ kind: "idle" });
+  const [test, setTest] = useState<{ kind: "idle" } | { kind: "testing" } | { kind: "waking" } | { kind: "ok"; message: string } | { kind: "error"; message: string }>({ kind: "idle" });
 
   useEffect(() => {
     getSettings().then((s) => {
@@ -57,11 +71,18 @@ export function Options() {
     setTest({ kind: "testing" });
     try {
       const client = new BackendClient({ backendUrl: form.backendUrl, accessToken: form.accessToken, clientId: await getClientId() });
-      const h = await client.health();
+      const h = isLocalBackend(client.baseUrl) ? await client.health() : await healthWithWakeUp(client, { onWaking: () => setTest({ kind: "waking" }) });
       setTest({ kind: "ok", message: `Connected to backend ${h.version} · provider ${h.provider}${h.model ? ` (${h.model})` : ""}${h.mock ? " · MOCK MODE (no AI key configured)" : ""} · ${h.knowledgeEntries} knowledge entries · storage: ${h.storage}` });
     } catch (err) {
       setTest({ kind: "error", message: err instanceof Error ? err.message : String(err) });
     }
+  };
+
+  const useDefaultServer = async () => {
+    const saved = await saveSettings({ backendUrl: DEFAULT_BACKEND_URL });
+    setForm((f) => ({ ...f, backendUrl: saved.backendUrl }));
+    setTest({ kind: "idle" });
+    flash("Serveur par défaut enregistré");
   };
 
   const clearData = async () => {
@@ -87,11 +108,20 @@ export function Options() {
             <label htmlFor="backendUrl">Backend URL</label>
             <input id="backendUrl" className="input" value={form.backendUrl} onChange={(e) => update("backendUrl", e.target.value)} placeholder="http://localhost:8787" spellCheck={false} />
           </div>
-          <Button onClick={() => void testConnection()} disabled={test.kind === "testing"}>
-            {test.kind === "testing" ? "Testing…" : "Test connection"}
+          <Button onClick={() => void testConnection()} disabled={test.kind === "testing" || test.kind === "waking"}>
+            {test.kind === "testing" ? "Testing…" : test.kind === "waking" ? "Réveil du serveur…" : "Test connection"}
           </Button>
         </div>
-        <p className="help">Local development: http://localhost:8787. Cloud deployment: your Render service URL (https).</p>
+        <div className="item-actions" style={{ marginTop: 8 }}>
+          <Button size="sm" variant="secondary" onClick={() => void useDefaultServer()} disabled={!loaded || normalizeBackendUrl(form.backendUrl) === DEFAULT_BACKEND_URL} data-testid="use-default-server">
+            Utiliser le serveur par défaut
+          </Button>
+        </div>
+        <p className="help">
+          Default server: {DEFAULT_BACKEND_URL}
+          {PRODUCTION_BACKEND_URL ? "" : " (this build has no production URL: set VITE_DEFAULT_BACKEND_URL in apps/extension/.env.production and rebuild)"}. Local development: {LOCAL_BACKEND_URL} (pnpm dev:backend).
+        </p>
+        {test.kind === "waking" ? <Banner tone="muted">Réveil du serveur… The free server was asleep; this can take up to a minute.</Banner> : null}
         {test.kind === "ok" ? <Banner tone="info">{test.message}</Banner> : null}
         {test.kind === "error" ? <Banner tone="error">{test.message}</Banner> : null}
         <div className="field" style={{ marginTop: 12 }}>

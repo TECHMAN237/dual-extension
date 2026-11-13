@@ -19,8 +19,38 @@ export interface Settings {
   historyLimit: number;
 }
 
-export const DEFAULT_BACKEND_URL = "http://localhost:8787";
+/** Local development backend (`pnpm dev:backend`). */
+export const LOCAL_BACKEND_URL = "http://localhost:8787";
+
+/** Turn the build-time VITE_DEFAULT_BACKEND_URL into a usable URL, or null when absent/invalid. */
+export function resolveBuildBackendUrl(raw: string | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  try {
+    const u = new URL(value);
+    if (u.protocol !== "http:" && u.protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+  return normalizeBackendUrl(value);
+}
+
+/**
+ * Production backend baked in at build time from apps/extension/.env.production
+ * (VITE_DEFAULT_BACKEND_URL). Null in development builds and tests.
+ */
+export const PRODUCTION_BACKEND_URL: string | null = resolveBuildBackendUrl(import.meta.env.VITE_DEFAULT_BACKEND_URL as string | undefined);
+
+/** Backend used by a fresh install and by "Use the default server". */
+export const DEFAULT_BACKEND_URL = PRODUCTION_BACKEND_URL ?? LOCAL_BACKEND_URL;
 export const MAX_HISTORY = 50;
+
+/**
+ * Settings schema version. v1 builds always stored http://localhost:8787 (the only default),
+ * so on upgrade that exact value is replaced by the production URL once. From v2 on, a
+ * localhost URL in storage was chosen by the user and is kept.
+ */
+export const SETTINGS_VERSION = 2;
 
 export const DEFAULT_SETTINGS: Settings = {
   backendUrl: DEFAULT_BACKEND_URL,
@@ -36,6 +66,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 const KEYS = {
   settings: "settings",
+  settingsVersion: "settingsVersion",
   clientId: "clientId",
   history: "history",
   corrections: "submittedCorrections",
@@ -71,8 +102,28 @@ export function validateSettings(partial: Partial<Settings>): string[] {
   return errors;
 }
 
+/**
+ * Pure migration step (exported for tests): settings saved by a v1 build with the old
+ * localhost default move to the production backend. Returns null when nothing changes.
+ */
+export function migrateStoredSettings(stored: Partial<Settings>, storedVersion: number | undefined, productionUrl: string | null): Partial<Settings> | null {
+  if ((storedVersion ?? 1) >= SETTINGS_VERSION || !productionUrl) return null;
+  if (stored.backendUrl === undefined || normalizeBackendUrl(stored.backendUrl) !== LOCAL_BACKEND_URL) return null;
+  return { ...stored, backendUrl: productionUrl };
+}
+
 export async function getSettings(): Promise<Settings> {
-  const stored = (await read<Partial<Settings>>(KEYS.settings)) ?? {};
+  let stored = (await read<Partial<Settings>>(KEYS.settings)) ?? {};
+  const version = await read<number>(KEYS.settingsVersion);
+  if ((version ?? 1) < SETTINGS_VERSION && PRODUCTION_BACKEND_URL) {
+    // Only builds that know a production URL migrate (and mark storage as migrated).
+    const migrated = migrateStoredSettings(stored, version, PRODUCTION_BACKEND_URL);
+    if (migrated) {
+      stored = migrated;
+      await write(KEYS.settings, stored);
+    }
+    await write(KEYS.settingsVersion, SETTINGS_VERSION);
+  }
   const merged = { ...DEFAULT_SETTINGS, ...stored };
   merged.backendUrl = normalizeBackendUrl(merged.backendUrl || DEFAULT_BACKEND_URL);
   merged.historyLimit = Math.min(MAX_HISTORY, Math.max(1, merged.historyLimit || MAX_HISTORY));
@@ -85,8 +136,24 @@ export async function saveSettings(partial: Partial<Settings>): Promise<Settings
   const current = await getSettings();
   const next: Settings = { ...current, ...partial };
   if (partial.backendUrl !== undefined) next.backendUrl = normalizeBackendUrl(partial.backendUrl);
-  await write(KEYS.settings, next);
+  // The default server is not pinned in storage: it follows the build, so rebuilding with a
+  // new VITE_DEFAULT_BACKEND_URL moves every install that uses the default. Only a custom URL is kept.
+  const toStore: Partial<Settings> = { ...next };
+  if (toStore.backendUrl === DEFAULT_BACKEND_URL) delete toStore.backendUrl;
+  await write(KEYS.settings, toStore);
+  // Whatever is stored from now on (including localhost) is the user's choice.
+  await write(KEYS.settingsVersion, SETTINGS_VERSION);
   return next;
+}
+
+/** True when the URL points at this machine (no sleeping cloud server to wake up). */
+export function isLocalBackend(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host.endsWith(".localhost");
+  } catch {
+    return false;
+  }
 }
 
 /* ------------------------------------------------------------------------- */
@@ -193,5 +260,5 @@ export async function updateSubmittedCorrections(records: CorrectionRecord[]): P
 }
 
 export async function clearAllLocalData(): Promise<void> {
-  await chrome.storage.local.remove([KEYS.settings, KEYS.history, KEYS.corrections, KEYS.clientId]);
+  await chrome.storage.local.remove([KEYS.settings, KEYS.settingsVersion, KEYS.history, KEYS.corrections, KEYS.clientId]);
 }

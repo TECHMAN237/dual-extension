@@ -1,39 +1,52 @@
 # Render Blueprint for the DOUALA AI backend.
-# Deploy: New → Blueprint → select this repository. Fill the secret env vars in the dashboard.
+# Deploy: render.com → New → Blueprint → select this repository.
+# Render asks for the values marked `sync: false` (AI_API_KEY, SUPABASE_URL,
+# SUPABASE_SERVICE_ROLE_KEY) when the Blueprint is created. See docs/DEPLOYMENT.md.
 services:
   - type: web
     name: douala-ai-backend
     runtime: node
-    plan: starter
+    # Free plan: the service sleeps after 15 min without traffic (wake-up ≈ 30–60 s)
+    # and its disk is wiped on every restart, so data lives in Supabase.
+    plan: free
     rootDir: .
     buildCommand: corepack enable && corepack prepare pnpm@10.28.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build
     startCommand: pnpm --filter @douala-ai/backend start
     healthCheckPath: /api/health
     envVars:
+      # `node --env-file-if-exists` (start script) needs Node 22.9+.
+      - key: NODE_VERSION
+        value: 22.12.0
       - key: NODE_ENV
         value: production
       - key: PORT
         value: "10000"
+      # --- AI provider: OpenRouter free models ---------------------------------
       - key: AI_PROVIDER
-        value: anthropic
+        value: openrouter
       - key: AI_API_KEY
         sync: false
       - key: AI_MODEL
-        value: claude-opus-5-5
+        value: google/gemma-4-31b-it:free
       - key: AI_FAST_MODEL
-        value: claude-sonnet-5-5
+        value: google/gemma-4-31b-it:free
+      # meta-llama/llama-3.3-70b-instruct:free is no longer offered by OpenRouter
+      # (checked against https://openrouter.ai/api/v1/models, Nov 2026).
       - key: AI_FALLBACK_MODEL
-        value: claude-sonnet-5-5
+        value: google/gemma-4-26b-a4b-it:free
+      - key: AI_BASE_URL
+        value: https://openrouter.ai/api/v1
+      # --- Persistent storage (required in production) --------------------------
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # --- Security ---------------------------------------------------------------
       - key: ADMIN_API_TOKEN
         generateValue: true
-      - key: EXTENSION_ACCESS_TOKEN
-        generateValue: true
+      # Only this extension id may call the API from a browser (CORS).
       - key: CORS_ALLOWED_ORIGINS
-        value: chrome-extension://*
+        value: chrome-extension://egmamnfapihdpbmnamooaabbafmncpbh
       - key: RATE_LIMIT_MAX
         value: "60"
       - key: LOG_LEVEL

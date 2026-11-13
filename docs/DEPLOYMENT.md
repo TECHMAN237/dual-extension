@@ -1,65 +1,128 @@
 # Deployment
 
-Two modes are supported. Local mode is enough to develop, test and demo; cloud mode is for sharing the backend with other users of the extension.
+In production the backend runs on **Render** (free plan) with its data in **Supabase**, and the extension uses that server by default. Nobody needs to run `pnpm dev:backend` to use the extension: that command is only for development.
 
-## Local mode (no cloud account needed)
+| Mode | Backend | Storage | Extension default |
+| --- | --- | --- | --- |
+| Production | Render web service `douala-ai-backend` | Supabase (PostgreSQL) | `VITE_DEFAULT_BACKEND_URL` from `apps/extension/.env.production` |
+| Development | `pnpm dev:backend` on http://localhost:8787 | memory + `apps/backend/data/local-knowledge.json` | http://localhost:8787 (build without `.env.production`, or change it in Settings) |
 
-```bash
-pnpm install
-cp .env.example apps/backend/.env       # keep AI_PROVIDER=mock, or set a real provider + key
-pnpm dev:backend                         # http://localhost:8787 (hot reload)
-pnpm build:extension                     # apps/extension/dist → load unpacked in Chrome
-```
+## 1. Supabase (database)
 
-- Storage: in-memory + `apps/backend/data/local-knowledge.json`.
-- Mock provider: no key, placeholder output, full UI flow.
-- Real provider: set `AI_PROVIDER` + `AI_API_KEY`, run `pnpm ai:test-connection`.
-- Admin page: http://localhost:8787/admin/ (no token needed on localhost unless `ADMIN_API_TOKEN` is set).
+Render's free plan wipes the disk on every restart and puts the server to sleep after 15 minutes without traffic, so validated words, corrections, history and usage must live in Supabase. With `NODE_ENV=production` the backend **refuses to start** without `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (set `ALLOW_EPHEMERAL_STORAGE=true` only for a throw-away test).
 
-## Cloud mode
+1. Go to https://supabase.com → **Sign in** (GitHub works) → **New project**.
+   - Organization: your personal one. Name: `douala-ai`. Database password: click *Generate a password* and keep it in a password manager (the backend does not need it).
+   - Region: the one closest to Render's region (for example *West EU* for Render *Frankfurt*). Plan: **Free**. Click **Create new project** and wait about 2 minutes.
+2. Left sidebar → **SQL Editor** → **New query**. Open `supabase/migrations/0001_initial.sql` from this repository, copy **all** of it, paste it, then click **Run**. If Supabase warns about "destructive operations" (the script drops and re-creates triggers/policies so it can be re-run), confirm with *Run this query*. Expected result: *Success. No rows returned*.
+   - `0002_embeddings.sql` is optional and not needed (semantic search is not wired yet).
+   - Check: left sidebar → **Table Editor** shows `languages` (3 rows), `linguistic_knowledge`, `corrections`, `translation_history`, `api_usage`, …
+3. Copy the two values the backend needs:
+   - **Project URL**: top bar **Connect** (or *Project Settings → Data API*), looks like `https://abcdefghijkl.supabase.co` → this is `SUPABASE_URL`.
+   - **Service role key**: *Project Settings → API Keys*. Use the **`service_role`** key (tab *Legacy API keys*, click *Reveal*) or a **secret key** (`sb_secret_…`). This is `SUPABASE_SERVICE_ROLE_KEY`. It bypasses Row Level Security: paste it only into Render, never into the extension, a chat, an issue or a commit.
+   - Do **not** use the `anon` / publishable key: with RLS it can only read verified vocabulary, so the backend could not save corrections.
 
-### 1. Supabase
+On its first start with an empty database the backend seeds the source registry and the UI term list automatically (log line `empty Supabase database seeded`). `pnpm --filter @douala-ai/backend seed` does the same by hand and is safe to repeat.
 
-Follow `docs/DATABASE.md`: run `supabase/migrations/0001_initial.sql`, copy `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`.
+Supabase free projects are **paused after 7 days without activity**; data is kept. If the extension reports Supabase errors after a long break, open the project on supabase.com and click **Restore project**.
 
-### 2. Backend on Render
+## 2. Backend on Render
 
-Option A — Blueprint: push the repository to GitHub, then Render → *New* → *Blueprint* → pick the repo. `render.yaml` defines the service. Fill `AI_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` in the dashboard (they are marked `sync: false`). `ADMIN_API_TOKEN` and `EXTENSION_ACCESS_TOKEN` are generated.
-
-Option B — manual Web Service:
+`render.yaml` (a Render *Blueprint*) describes the service:
 
 | Setting | Value |
 | --- | --- |
-| Runtime | Node 20+ |
-| Build command | `corepack enable && corepack prepare pnpm@10.28.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build` |
-| Start command | `pnpm --filter @douala-ai/backend start` |
+| Plan | `free` |
+| Node | `NODE_VERSION=22.12.0` (the start script uses `node --env-file-if-exists`, Node ≥ 22.9) |
+| Build | `corepack enable && corepack prepare pnpm@10.28.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build` |
+| Start | `pnpm --filter @douala-ai/backend start` |
 | Health check | `/api/health` |
-| Env vars | everything from `.env.example`; `NODE_ENV=production`, `PORT=10000` (Render's default) |
+| AI | `AI_PROVIDER=openrouter`, `AI_MODEL` / `AI_FAST_MODEL=google/gemma-4-31b-it:free`, `AI_FALLBACK_MODEL=google/gemma-4-26b-a4b-it:free`, `AI_BASE_URL=https://openrouter.ai/api/v1` |
+| Secrets you type in the dashboard (`sync: false`) | `AI_API_KEY` (OpenRouter key), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| Generated by Render | `ADMIN_API_TOKEN` (protects `/admin/` and `/api/admin/*`) |
+| CORS | `CORS_ALLOWED_ORIGINS=chrome-extension://egmamnfapihdpbmnamooaabbafmncpbh` |
 
-Production rules enforced by `loadConfig`: `AI_PROVIDER` must not be `mock`, `ADMIN_API_TOKEN` must be set. Render provides HTTPS automatically.
+`EXTENSION_ACCESS_TOKEN` is not set: the API is protected by CORS (only this extension id may call it from a browser), input validation and the rate limit (`RATE_LIMIT_MAX=60` per minute per client). `meta-llama/llama-3.3-70b-instruct:free` is not used as fallback because OpenRouter no longer offers that free variant.
 
-After deployment:
+### Create the service
+
+1. https://render.com → **Get Started** / **Sign in** → *GitHub* (authorise Render).
+2. Dashboard → **New +** → **Blueprint**.
+3. *Connect a repository*: pick **TECHMAN237/dual-extension**. If it is not listed, click *Configure account* → GitHub → *Only select repositories* → add `dual-extension` → *Save*, then come back.
+4. Blueprint name: `douala-ai`. Branch: `main`. Render reads `render.yaml` and lists the service `douala-ai-backend` (Free).
+5. Fill the three fields Render asks for:
+   - `AI_API_KEY` → your OpenRouter key (`sk-or-…`, from https://openrouter.ai/keys);
+   - `SUPABASE_URL` → the Project URL from step 1.3;
+   - `SUPABASE_SERVICE_ROLE_KEY` → the service_role / secret key from step 1.3.
+6. Click **Deploy Blueprint** (*Apply*). The first build takes a few minutes; the *Events* tab shows `Deploy live`.
+7. Open the service **douala-ai-backend**: its URL is shown under the name, normally `https://douala-ai-backend.onrender.com` (Render adds a suffix such as `-x1y2` if the name is taken). Check it:
+
+   ```bash
+   curl https://douala-ai-backend.onrender.com/api/health
+   ```
+
+   Expect `"provider":"openrouter"`, `"storage":"supabase"`, `"mock":false`.
+
+To change a value later: service → **Environment** → edit → *Save, rebuild and deploy*. The admin token is under the same page (`ADMIN_API_TOKEN`, *reveal*); the admin page is `https://<service>.onrender.com/admin/`.
+
+If the deploy fails, open **Logs**: `Configuration problems:` lines name the missing or wrong variable.
+
+### Free plan behaviour
+
+- After 15 minutes without requests the server sleeps; the next request wakes it in about 30–60 s. The extension handles this: the popup shows **Réveil du serveur…** instead of *Offline* and keeps trying for up to 60 s; Settings → *Test connection* does the same; on the first *Translate page* it explains "Réveil du serveur, la première traduction peut prendre une minute" if nothing came back after 4 s. **Scan page** never waits for the server (language detection is local).
+- 750 free instance hours per month per workspace: enough for one service running all the time.
+- OpenRouter free models: 20 requests/minute, 50/day (1000/day after buying 10 credits). See `docs/AI_CONFIGURATION.md`.
+
+### Reproducing the Render build locally
+
+From a clean clone (no `apps/backend/.env`):
 
 ```bash
-curl https://<your-service>.onrender.com/api/health
+corepack enable && corepack prepare pnpm@10.28.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build
+NODE_ENV=production PORT=10000 AI_PROVIDER=openrouter AI_API_KEY=placeholder ADMIN_API_TOKEN=x ALLOW_EPHEMERAL_STORAGE=true pnpm --filter @douala-ai/backend start
+curl http://localhost:10000/api/health
 ```
 
-Seed the source registry once: open a Render shell (or run locally with the cloud `.env`) and execute `pnpm --filter @douala-ai/backend seed`.
+`corepack enable` writes pnpm shims into the Node installation folder; on Windows it may need an administrator terminal (or skip it if `pnpm --version` already prints 10.28.0).
 
-### 3. Point the extension at the cloud backend
+## 3. Extension pointing at the server
 
-Extension → Settings (gear icon) → *Backend URL* = `https://<your-service>.onrender.com`, *Access token* = the value of `EXTENSION_ACCESS_TOKEN`, then *Test connection*.
+The default backend URL is compiled into the extension from `apps/extension/.env.production` (git-ignored):
 
-### 4. Harden
+```bash
+cp apps/extension/.env.production.example apps/extension/.env.production
+# edit it if Render gave another URL:
+# VITE_DEFAULT_BACKEND_URL=https://douala-ai-backend.onrender.com
+pnpm build:extension
+```
 
-- Set `CORS_ALLOWED_ORIGINS=chrome-extension://<your-extension-id>` (the id is shown on `chrome://extensions`).
-- Keep `RATE_LIMIT_MAX` conservative; monitor `/api/admin/usage`.
-- Rotate `ADMIN_API_TOKEN` / `EXTENSION_ACCESS_TOKEN` from the Render dashboard; the service restarts automatically.
+The build ends with `check-build: OK (…; default backend https://…)`, which proves the URL is inside the bundle. Then `chrome://extensions` → DOUALA AI → **reload** (↻), and reload the web page.
+
+- New installs use that URL. Installs whose stored URL is exactly `http://localhost:8787` (the old default) move to it once.
+- A URL typed by hand in Settings is kept. **Utiliser le serveur par défaut** in Settings goes back to the built-in URL, and the default is not pinned in storage, so rebuilding with a new URL moves every install that uses the default.
+- Without `.env.production` the build falls back to `http://localhost:8787` (development).
+- CORS allows only `chrome-extension://egmamnfapihdpbmnamooaabbafmncpbh`. An unpacked extension's id depends on the folder it is loaded from: if you load `dist` from another folder (or publish to the Chrome Web Store), read the new id on `chrome://extensions` and update `CORS_ALLOWED_ORIGINS` in Render.
+
+## 4. Development mode (local backend)
+
+```bash
+pnpm install
+cp .env.example apps/backend/.env       # AI_PROVIDER=mock, or openrouter + key
+pnpm dev:backend                         # http://localhost:8787 (hot reload)
+```
+
+Point the extension at it: Settings → *Backend URL* = `http://localhost:8787` → *Save settings* (or build without `apps/extension/.env.production`). The admin page is http://localhost:8787/admin/ (no token needed on localhost unless `ADMIN_API_TOKEN` is set).
+
+## 5. Harden later
+
+- Rotate `ADMIN_API_TOKEN` from the Render dashboard; the service restarts automatically.
+- Keep `RATE_LIMIT_MAX` conservative; watch `/api/admin/usage`.
+- If the API ever needs to be closed to other clients (CORS does not stop non-browser clients), set `EXTENSION_ACCESS_TOKEN` in Render and the same value in the extension Settings (*Access token*).
 
 ## Other hosts
 
-Any Node 20+ host works: build with `pnpm --filter @douala-ai/backend... build`, deploy `apps/backend/dist` together with `node_modules`, run `node dist/index.js`. A `Dockerfile` is not included; a minimal one would copy the workspace, run `pnpm install --prod=false && pnpm build:backend` and start `node apps/backend/dist/index.js`.
+Any Node 22.9+ host works: build with `pnpm --filter @douala-ai/backend... build`, deploy `apps/backend/dist` together with `node_modules`, run `node apps/backend/dist/index.js` with the environment variables above.
 
 ## Publishing the extension
 
-`pnpm build:extension` produces `apps/extension/dist`. Zip that folder for the Chrome Web Store. Before publishing, set the default backend URL in the extension settings to your cloud URL (users can still change it), and pin CORS on the backend.
+Build with the production `.env.production`, zip `apps/extension/dist` for the Chrome Web Store, then add the store extension id to `CORS_ALLOWED_ORIGINS` (comma-separated).

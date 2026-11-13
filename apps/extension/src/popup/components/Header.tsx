@@ -1,10 +1,16 @@
 import type { HealthResponse } from "@douala-ai/shared";
 import { sendToBackground } from "../../shared/messages";
 
-export type HealthState = { status: "checking" } | { status: "connected"; info: HealthResponse } | { status: "mock"; info: HealthResponse } | { status: "offline"; error: string };
+export type HealthState =
+  | { status: "checking" }
+  | { status: "waking" }
+  | { status: "connected"; info: HealthResponse }
+  | { status: "mock"; info: HealthResponse }
+  | { status: "offline"; error: string };
 
 const LABELS: Record<HealthState["status"], string> = {
   checking: "Checking…",
+  waking: "Réveil du serveur…",
   connected: "Connected",
   mock: "Mock mode",
   offline: "Offline",
@@ -16,7 +22,9 @@ export function Header({ health }: { health: HealthState }) {
       ? `Backend ${health.info.version} · provider: ${health.info.provider}${health.info.model ? ` · model: ${health.info.model}` : ""} · ${health.info.knowledgeEntries} knowledge entries`
       : health.status === "offline"
         ? health.error
-        : "Contacting the backend";
+        : health.status === "waking"
+          ? "The free server was asleep and is starting (up to 60 s)."
+          : "Contacting the backend";
   return (
     <header className="header">
       <div className="monogram" aria-hidden="true">

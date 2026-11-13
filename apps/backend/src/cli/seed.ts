@@ -1,21 +1,17 @@
 /**
  * Seeds linguistic sources (and the empty UI term list) into the configured store.
  * Safe to run repeatedly. Usage: pnpm --filter @douala-ai/backend seed
+ * (The server also does this automatically on first start with an empty Supabase database.)
  */
-import { loadSeedSources, loadSeedUiTerms } from "@douala-ai/linguistic-knowledge";
 import { createContainer } from "../container";
 import { loadConfig } from "../config";
+import { seedStore } from "../seed";
 
 async function main() {
   const config = loadConfig();
   const c = await createContainer(config);
-  for (const s of loadSeedSources()) {
-    const existing = await c.store.getSource(s.id);
-    await c.store.upsertSource(existing ? { ...s, ingestionStatus: existing.ingestionStatus, lastIngestedAt: existing.lastIngestedAt, notes: existing.notes ?? s.notes } : s);
-  }
-  const terms = loadSeedUiTerms();
-  await c.store.upsertEntries(terms);
-  console.log(`Seeded ${loadSeedSources().length} sources and ${terms.length} UI terms (empty targets) into ${c.store.kind} store.`);
+  const { sources, terms } = await seedStore(c.store);
+  console.log(`Seeded ${sources} sources and ${terms} UI terms (empty targets) into ${c.store.kind} store.`);
 }
 
 void main().catch((err) => {

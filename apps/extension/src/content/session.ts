@@ -43,6 +43,8 @@ export class PageSession {
   private observer: DynamicContentObserver;
   private dynamicEnabled = false;
   private inFlight = 0;
+  private scanGeneration = 0;
+  private pendingAnalysis: Promise<void> = Promise.resolve();
 
   constructor(private readonly opts: SessionOptions) {
     const root = opts.root ?? document.body;
@@ -94,20 +96,24 @@ export class PageSession {
     const local = detectSourceLanguage(sample, this.state.htmlLang);
     this.state.detectedLanguage = local.language;
     this.state.detectionConfidence = local.language ? local.confidence : null;
-    // The popup can display the language and element count right away.
-    this.emit();
-
-    let analyzedByBackend = false;
-    try {
-      const remote = await this.opts.backend.scanAnalyze({ domain: this.state.domain, htmlLang: this.state.htmlLang ?? undefined, sampleText: sample.slice(0, 5000), segmentCount: segments.length });
-      analyzedByBackend = true;
-      if (remote.detectedLanguage) {
+    // The scan never waits for the server: local detection is enough to show the
+    // language and to translate. The server check runs in the background (it also
+    // wakes a sleeping free-tier server) and only refines the result if it answers.
+    const scanId = ++this.scanGeneration;
+    this.pendingAnalysis = this.opts.backend
+      .scanAnalyze({ domain: this.state.domain, htmlLang: this.state.htmlLang ?? undefined, sampleText: sample.slice(0, 5000), segmentCount: segments.length })
+      .then((remote) => {
+        // Ignore stale answers (a newer scan started) and never change the language mid-translation.
+        if (scanId !== this.scanGeneration || !remote.detectedLanguage) return;
+        if (this.state.status !== "scanned" && this.state.status !== "translated") return;
+        if (remote.detectedLanguage === this.state.detectedLanguage && remote.confidence === this.state.detectionConfidence) return;
         this.state.detectedLanguage = remote.detectedLanguage;
         this.state.detectionConfidence = remote.confidence;
-      }
-    } catch {
-      /* backend unreachable: keep the local detection */
-    }
+        this.emit();
+      })
+      .catch(() => {
+        /* backend unreachable or asleep: keep the local detection */
+      });
 
     setStatus(this.state, this.registry.size > 0 ? "translated" : "scanned");
     this.emit();
@@ -118,8 +124,13 @@ export class PageSession {
       detectedLanguage: this.state.detectedLanguage,
       detectionConfidence: this.state.detectionConfidence,
       totalSegments: this.state.totalSegments,
-      analyzedByBackend,
+      analyzedByBackend: false,
     };
+  }
+
+  /** Resolves when the background server language check of the last scan has settled (tests). */
+  whenAnalysisSettled(): Promise<void> {
+    return this.pendingAnalysis;
   }
 
   /* ----------------------------------------------------------------------- */

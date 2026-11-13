@@ -72,8 +72,8 @@ export class BackendClient {
     return json as T;
   }
 
-  health(): Promise<HealthResponse> {
-    return this.request<HealthResponse>("GET", "/api/health", undefined, 8_000);
+  health(timeoutMs = 8_000): Promise<HealthResponse> {
+    return this.request<HealthResponse>("GET", "/api/health", undefined, timeoutMs);
   }
 
   languages(): Promise<{ languages: LanguageDefinition[] }> {
@@ -95,6 +95,60 @@ export class BackendClient {
   correctionStatus(ids: string[]): Promise<{ corrections: CorrectionRecord[] }> {
     const query = encodeURIComponent(ids.join(","));
     return this.request("GET", `/api/corrections/status?ids=${query}`, undefined, 15_000);
+  }
+}
+
+export interface WakeUpOptions {
+  /** Total time allowed for the server to wake up (Render free plan: ~30–60 s). */
+  totalMs?: number;
+  /** Call `onWaking` when the first answer takes longer than this. */
+  wakingAfterMs?: number;
+  /** Pause between attempts after a network error or a 5xx. */
+  retryDelayMs?: number;
+  /** Called once, as soon as the server looks asleep. */
+  onWaking?: () => void;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
+/** Errors that can happen while a sleeping host starts: no answer, connection refused, 502/503/504. */
+function isWakeUpError(err: unknown): boolean {
+  if (!(err instanceof ApiError)) return true;
+  return err.status === 0 || err.status === 408 || err.status === 429 || err.status >= 500;
+}
+
+/**
+ * Health check that tolerates a sleeping free-tier server: keeps trying for up to
+ * `totalMs` and reports "waking" instead of failing straight away.
+ * Auth/config errors (4xx) fail immediately.
+ */
+export async function healthWithWakeUp(client: Pick<BackendClient, "health">, opts: WakeUpOptions = {}): Promise<HealthResponse> {
+  const totalMs = opts.totalMs ?? 60_000;
+  const retryDelayMs = opts.retryDelayMs ?? 3_000;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const now = opts.now ?? Date.now;
+  const deadline = now() + totalMs;
+  let waking = false;
+  const markWaking = () => {
+    if (!waking) {
+      waking = true;
+      opts.onWaking?.();
+    }
+  };
+  const wakingTimer = setTimeout(markWaking, opts.wakingAfterMs ?? 3_000);
+  try {
+    for (;;) {
+      const remaining = deadline - now();
+      try {
+        return await client.health(Math.max(1_000, remaining));
+      } catch (err) {
+        if (!isWakeUpError(err) || deadline - now() <= retryDelayMs) throw err;
+        markWaking();
+        await sleep(retryDelayMs);
+      }
+    }
+  } finally {
+    clearTimeout(wakingTimer);
   }
 }
 
