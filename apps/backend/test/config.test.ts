@@ -86,6 +86,14 @@ describe("loadConfig", () => {
   it("rejects mock provider and missing admin token in production", () => {
     expect(() => loadConfig({ NODE_ENV: "production", AI_PROVIDER: "mock" })).toThrow(/production/);
   });
+  it("TRANSLATION_MODE defaults to assisted, accepts strict and rejects anything else", () => {
+    expect(loadConfig(testEnv()).engine.translationMode).toBe("assisted");
+    expect(loadConfig(testEnv({ TRANSLATION_MODE: "strict" })).engine.translationMode).toBe("strict");
+    expect(() => loadConfig(testEnv({ TRANSLATION_MODE: "creative" }))).toThrow(ConfigError);
+    const yaml = readFileSync(fileURLToPath(new URL("../../../render.yaml", import.meta.url)), "utf8");
+    expect(yaml).toMatch(/- key: TRANSLATION_MODE\n\s+value: "assisted"/);
+    expect(describeConfig(loadConfig(testEnv()))).toMatchObject({ translationMode: "assisted" });
+  });
   it("requires Supabase in production unless ephemeral storage is explicitly allowed", () => {
     const prod = { NODE_ENV: "production", AI_PROVIDER: "openrouter", AI_API_KEY: "sk-or-test", ADMIN_API_TOKEN: "admin" };
     expect(() => loadConfig(prod)).toThrow(/SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required in production/);

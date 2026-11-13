@@ -43,6 +43,14 @@ export class SiteBlockedError extends Error {
   }
 }
 
+/** Non-retryable HTTP answer (e.g. 500, oversized body): reported as is. */
+export class HttpStatusError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "HttpStatusError";
+  }
+}
+
 const CHALLENGE_MARKERS = [/<title>\s*just a moment/i, /cf-chl-|challenge-platform|cf_chl_opt/i, /g-recaptcha|h-captcha|hcaptcha\.com|recaptcha\/api/i, /<title>[^<]*(captcha|access denied|attention required)/i];
 
 /** True when an HTML body is a bot challenge / CAPTCHA page rather than content. */
@@ -125,28 +133,33 @@ export class PoliteSession {
       const robots = await this.robotsFor(url);
       if (robots && !isAllowedByRobots(robots, url.pathname + url.search, this.ua)) throw new SiteBlockedError("Disallowed by robots.txt", target, 0);
     }
-    let res: Response;
+    const attempt = async (): Promise<string | null> => {
+      const res = await this.raw(url, accept);
+      if (res.status === 403 || res.status === 429) throw new SiteBlockedError(`HTTP ${res.status}: the site refused the request. Stopping, not retrying.`, target, res.status);
+      if (res.status === 404) return null;
+      if (!res.ok) throw new HttpStatusError(`HTTP ${res.status} for ${target}`);
+      // Reading the body can time out too: it is part of the same attempt.
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.byteLength > (this.opts.maxBytes ?? 10 * 1024 * 1024)) throw new HttpStatusError(`Response too large for ${target}`);
+      const text = buf.toString("utf8");
+      if (looksLikeChallenge(text)) throw new SiteBlockedError("CAPTCHA / bot challenge detected. Stopping, not bypassing.", target, res.status);
+      return text;
+    };
     try {
-      res = await this.raw(url, accept);
+      return await attempt();
     } catch (err) {
-      // A dropped connection may be transient or a sign the site wants us to slow down:
-      // wait 30 s and try once more; a second failure stops the whole run.
+      if (err instanceof SiteBlockedError || err instanceof HttpStatusError) throw err;
+      // A dropped connection or a timeout (while connecting or reading) may be transient or a
+      // sign the site wants us to slow down: wait 30 s and try once more; a second failure stops the run.
       this.opts.log?.(`network error (${(err as Error).message}); pausing 30 s before one retry`);
       await this.sleep(30_000);
       try {
-        res = await this.raw(url, accept);
+        return await attempt();
       } catch (err2) {
-        throw new SiteBlockedError(`Connection failed twice (${(err2 as Error).message}). Stopping, the site may be limiting us.`, target, 0);
+        if (err2 instanceof SiteBlockedError || err2 instanceof HttpStatusError) throw err2;
+        throw new SiteBlockedError(`Network failed twice (${(err2 as Error).message}). Stopping, the site may be limiting us.`, target, 0);
       }
     }
-    if (res.status === 403 || res.status === 429) throw new SiteBlockedError(`HTTP ${res.status}: the site refused the request. Stopping, not retrying.`, target, res.status);
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${target}`);
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (buf.byteLength > (this.opts.maxBytes ?? 10 * 1024 * 1024)) throw new Error(`Response too large for ${target}`);
-    const text = buf.toString("utf8");
-    if (looksLikeChallenge(text)) throw new SiteBlockedError("CAPTCHA / bot challenge detected. Stopping, not bypassing.", target, res.status);
-    return text;
   }
 }
 

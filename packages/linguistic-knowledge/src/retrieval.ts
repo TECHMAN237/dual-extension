@@ -1,4 +1,4 @@
-import { RELIABILITY_RANK, normalizeForLookup, tokenize } from "@douala-ai/shared";
+import { RELIABILITY_RANK, contentTokens, dictionaryKey, normalizeForLookup, tokenize } from "@douala-ai/shared";
 import type { EvidenceLevel, KnowledgeEntry, SourceLanguageCode, TargetLanguageCode, TranslationReference } from "@douala-ai/shared";
 import type { KnowledgeStore } from "./store";
 
@@ -41,29 +41,52 @@ function jaccard(a: Set<string>, b: Set<string>): number {
   return inter / (a.size + b.size - inter);
 }
 
-/** Score a single entry against a query; exported for tests. */
+/** Overlap matches below this relevance are noise ("Compte courant" vs "le compte-rendu"). */
+export const MIN_OVERLAP_RELEVANCE = 0.5;
+
+/** Categories whose target text can stand for the source text (grammar notes cannot). */
+export const TRANSLATABLE_CATEGORIES: ReadonlySet<KnowledgeEntry["category"]> = new Set(["vocabulary", "expression", "translation_pair", "sentence_example", "contextual_meaning", "language_variant"]);
+
+/**
+ * Score a single entry against a query; exported for tests.
+ *
+ * - exact: same dictionary key (case, accents, final punctuation, leading article, simple plural).
+ * - otherwise the entry must share at least one CONTENT word with the query: function words
+ *   (le, les, de, votre, the, of, your…) never create a reference on their own.
+ * - overlap matches below MIN_OVERLAP_RELEVANCE are dropped.
+ * - for a one- or two-word segment, long example sentences are not used unless they match exactly.
+ */
 export function scoreEntry(query: string, entry: KnowledgeEntry): RankedReference | null {
   const qn = normalizeForLookup(query);
   const en = normalizeForLookup(entry.sourceText);
   if (!qn || !en) return null;
-  const qTokens = new Set(tokenize(qn));
-  const eTokens = new Set(tokenize(en));
 
   let relevance: number;
   let matchType: RankedReference["matchType"];
-  if (qn === en) {
+  if (qn === en || dictionaryKey(query) === dictionaryKey(entry.sourceText)) {
     relevance = 1;
     matchType = "exact";
-  } else if (qn.includes(` ${en} `) || qn.startsWith(`${en} `) || qn.endsWith(` ${en}`)) {
-    // Entry is a sub-phrase of the query: useful vocabulary for composing the translation.
-    relevance = 0.6 + 0.3 * (eTokens.size / Math.max(qTokens.size, 1));
-    matchType = "contained";
-  } else if (en.includes(qn)) {
-    relevance = 0.5 + 0.3 * (qTokens.size / Math.max(eTokens.size, 1));
-    matchType = "contains";
   } else {
-    relevance = jaccard(qTokens, eTokens) * 0.8;
-    matchType = "overlap";
+    const qContent = new Set(contentTokens(qn));
+    const eContent = new Set(contentTokens(en));
+    if (qContent.size === 0 || eContent.size === 0) return null;
+    let shared = 0;
+    for (const t of eContent) if (qContent.has(t)) shared++;
+    if (shared === 0) return null;
+    const qWords = tokenize(qn).length;
+    if (qWords <= 2 && (entry.category === "sentence_example" || tokenize(en).length > 4)) return null;
+    if (qn.includes(` ${en} `) || qn.startsWith(`${en} `) || qn.endsWith(` ${en}`)) {
+      // Entry is a sub-phrase of the query: useful vocabulary for composing the translation.
+      relevance = 0.6 + 0.3 * (eContent.size / Math.max(qContent.size, 1));
+      matchType = "contained";
+    } else if (en.includes(qn)) {
+      relevance = 0.5 + 0.3 * (qContent.size / Math.max(eContent.size, 1));
+      matchType = "contains";
+    } else {
+      relevance = jaccard(qContent, eContent) * 0.8;
+      matchType = "overlap";
+      if (relevance < MIN_OVERLAP_RELEVANCE) return null;
+    }
   }
   if (relevance <= 0) return null;
 
@@ -102,6 +125,59 @@ export async function retrieveReferences(store: KnowledgeStore, query: string, o
     if (out.length >= (options.limit ?? 8)) break;
   }
   return out;
+}
+
+/* ------------------------------------------------------------------------- */
+/* Direct dictionary lookup (no AI)                                           */
+/* ------------------------------------------------------------------------- */
+
+export interface DictionaryMatch {
+  /** Entry whose Duala text is applied. */
+  best: KnowledgeEntry;
+  /** Other entries with the same key but a different Duala text (most reliable first). */
+  alternatives: KnowledgeEntry[];
+  /** All matching entries with the chosen Duala text (several sources may agree). */
+  agreeing: KnowledgeEntry[];
+  evidence: EvidenceLevel;
+}
+
+const sameDuala = (a: string, b: string) => a.normalize("NFC").toLowerCase().trim() === b.normalize("NFC").toLowerCase().trim();
+
+/** Most trustworthy first: verified, then source reliability, then origin. */
+function trustRank(e: KnowledgeEntry): number {
+  return (e.validationStatus === "verified" ? 100 : 0) + RELIABILITY_RANK[e.reliability] * 10 + ORIGIN_BOOST[e.origin] * 5;
+}
+
+/** Evidence for a direct dictionary hit: high if verified, moderate if established or better, else low. */
+export function dictionaryEvidence(e: KnowledgeEntry): EvidenceLevel {
+  if (e.validationStatus === "verified") return "high";
+  if (RELIABILITY_RANK[e.reliability] >= RELIABILITY_RANK.established) return "moderate";
+  return "low";
+}
+
+/**
+ * Find knowledge entries whose source text is EXACTLY the given text (same dictionary key) and
+ * that carry a Duala translation, whatever their review status (rejected entries excluded).
+ * When several Duala texts exist, the most reliable wins; ties go to the text most sources agree on.
+ */
+export async function lookupDictionary(store: KnowledgeStore, text: string, options: Pick<RetrievalOptions, "sourceLanguage" | "targetLanguage">): Promise<DictionaryMatch | null> {
+  const key = dictionaryKey(text);
+  if (!key) return null;
+  const candidates = await store.searchCandidates(text, { sourceLanguage: options.sourceLanguage, targetLanguage: options.targetLanguage, includeUnverified: true, limit: 5000 });
+  const matches = candidates.filter((e) => e.targetText && e.targetText.trim() && e.validationStatus !== "rejected" && TRANSLATABLE_CATEGORIES.has(e.category) && dictionaryKey(e.sourceText) === key);
+  if (matches.length === 0) return null;
+  // Group by Duala text.
+  const groups: { target: string; entries: KnowledgeEntry[] }[] = [];
+  for (const e of matches) {
+    const g = groups.find((x) => sameDuala(x.target, e.targetText!));
+    if (g) g.entries.push(e);
+    else groups.push({ target: e.targetText!, entries: [e] });
+  }
+  for (const g of groups) g.entries.sort((a, b) => trustRank(b) - trustRank(a) || a.id.localeCompare(b.id));
+  groups.sort((a, b) => trustRank(b.entries[0]!) - trustRank(a.entries[0]!) || b.entries.length - a.entries.length || (a.entries[0]!.category === "sentence_example" ? 1 : 0) - (b.entries[0]!.category === "sentence_example" ? 1 : 0) || a.target.localeCompare(b.target));
+  const [winner, ...others] = groups;
+  const best = winner!.entries[0]!;
+  return { best, agreeing: winner!.entries, alternatives: others.map((g) => g.entries[0]!), evidence: dictionaryEvidence(best) };
 }
 
 /**

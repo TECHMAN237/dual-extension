@@ -193,7 +193,8 @@ describe("provider failures", () => {
         throw new ProviderError("Anthropic authentication failed: check AI_API_KEY", { retryable: false, status: 401, provider: "anthropic" });
       },
     };
-    const { app } = await makeApp({ provider: failing, entries: [fakeEntry({ sourceText: "Search", targetText: "T:search" })] });
+    // Strict mode: the segment without evidence goes to the (failing) model; in assisted mode it would be kept without a call.
+    const { app } = await makeApp({ provider: failing, env: { TRANSLATION_MODE: "strict" }, entries: [fakeEntry({ sourceText: "Search", targetText: "T:search" })] });
     const res = await app.inject({ method: "POST", url: "/api/translate/batch", headers, payload: { sourceLanguage: "en", items: [{ id: "a", text: "Search" }, { id: "b", text: "Something else entirely" }] } });
     expect(res.statusCode).toBe(200);
     const byId = Object.fromEntries(res.json().results.map((r: { id: string }) => [r.id, r]));

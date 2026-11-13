@@ -1,7 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { knowledgeEntrySchema, linguisticSourceSchema, normalizeForLookup, tokenize } from "@douala-ai/shared";
+import { knowledgeEntrySchema, linguisticSourceSchema, lookupTokens, normalizeForLookup, tokenize } from "@douala-ai/shared";
 import type { KnowledgeEntry, LinguisticSource } from "@douala-ai/shared";
 import type { KnowledgeEntryInput, KnowledgeSearchOptions, KnowledgeStore } from "../store";
 
@@ -77,7 +77,7 @@ export class InMemoryKnowledgeStore implements KnowledgeStore {
 
   private addToIndex(entry: KnowledgeEntry): void {
     this.entries.set(entry.id, entry);
-    for (const token of new Set(tokenize(entry.sourceText))) {
+    for (const token of new Set([...tokenize(entry.sourceText), ...lookupTokens(entry.sourceText)])) {
       let set = this.index.get(token);
       if (!set) {
         set = new Set();
@@ -88,7 +88,7 @@ export class InMemoryKnowledgeStore implements KnowledgeStore {
   }
 
   private removeFromIndex(entry: KnowledgeEntry): void {
-    for (const token of new Set(tokenize(entry.sourceText))) {
+    for (const token of new Set([...tokenize(entry.sourceText), ...lookupTokens(entry.sourceText)])) {
       this.index.get(token)?.delete(entry.id);
     }
     this.entries.delete(entry.id);
@@ -113,7 +113,9 @@ export class InMemoryKnowledgeStore implements KnowledgeStore {
   }
 
   async searchCandidates(query: string, options: KnowledgeSearchOptions): Promise<KnowledgeEntry[]> {
-    const tokens = new Set(tokenize(query));
+    // Content words (+ singular forms) only: function words such as "les" match hundreds of
+    // entries and would fill the candidate limit before the meaningful word is reached.
+    const tokens = new Set(lookupTokens(query));
     const normalized = normalizeForLookup(query);
     const ids = new Set<string>();
     for (const t of tokens) for (const id of this.index.get(t) ?? []) ids.add(id);

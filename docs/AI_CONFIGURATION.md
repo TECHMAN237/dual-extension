@@ -145,3 +145,59 @@ AI_MODEL=google/gemma-4-31b-it
 ```
 
 Restart the backend, then run `pnpm ai:test-connection` to confirm the model answers.
+
+## 11. Translation pipeline and `TRANSLATION_MODE`
+
+Each segment goes through three layers, in this order:
+
+1. **Direct dictionary (no AI).** If the segment matches **exactly** a knowledge-base entry that has a Duala text, that text is applied directly and the model is not called, even if the entry is still `pending`.
+   - **Normalisation:** case, accents, final punctuation, a leading article (le/la/les/l'/un/une/des/du/the/a/an/to) and a simple plural in -s/-x on words of 5+ letters. For example "Transferts" = "le transfert" and "Payer." = "payer". "Pays" is not reduced to "pay".
+   - **Evidence:**
+     - `high` if the entry is `verified`;
+     - `moderate` if its source reliability is `established` or better;
+     - otherwise `low`.
+   - `needsReview` is true unless the entry is verified, and the reference is attached.
+   - **Several translations:** the most reliable is applied (verified first, then source reliability). The others are listed in `note`.
+2. **Retrieval.** Partial references are found for the model, with these filters:
+   - Function words (le, la, les, de, des, du, un, une, votre, vos, et, à, en, the, a, of, your, to…) never create a reference on their own: a reference must share a content word with the segment.
+   - Overlap matches below 0.5 relevance are dropped.
+   - For a one- or two-word segment, long example sentences are not used unless they match exactly.
+3. **Model**, depending on `TRANSLATION_MODE`:
+
+| Mode | When the model is called | What it may write | Evidence |
+| --- | --- | --- | --- |
+| `assisted` (default) | Only if at least one **content word** of the segment has a Duala reference (an exact entry for that word, or a reference phrase contained in the segment). Otherwise the original text is kept **without any model call**. | Duala words copied from the references; every other word stays in the source language as a loan, as speakers often do (words without a reference, proper names, brands, technical terms). | at most `low`, `needsReview: true` |
+| `strict` | For every segment not handled by the dictionary layer (original behaviour). | A translation only when the evidence is sufficient; otherwise `null`. | as before |
+
+**Anti-invention check (assisted).** The engine rejects an output in two cases:
+- it contains **no** Duala word from the references given for that segment;
+- it contains a word that is **neither** in the source text **nor** in those references.
+
+The comparison is exact: same letters and the same tone marks. A rejected output becomes `uncertain`, and the original text is kept with a note.
+
+**Proper names.** Capitalised words after the first word of a segment ("Safinum **Pay**") are treated as names or brands. They never trigger a translation.
+
+**Mock provider.** With `AI_PROVIDER=mock` the strict pipeline is always used, so the interface can be exercised with the visible `[MOCK dua] …` placeholders.
+
+Set the mode in `apps/backend/.env` or on Render (`render.yaml` sets `TRANSLATION_MODE="assisted"`):
+
+```ini
+TRANSLATION_MODE=assisted   # or strict
+```
+
+### Measuring coverage
+
+```bash
+pnpm coverage:check                                         # data/knowledge/samples/banque.txt, configured mode
+pnpm coverage:check --file my-texts.txt --mode strict       # one text per line
+```
+
+For every line the command prints how it would be handled:
+- **DICTIONNAIRE:** translated directly, with the Duala text;
+- **ASSISTÉ:** the model may translate it, and the words that have a reference are listed;
+- **MODÈLE:** strict mode, the result depends on the model;
+- **ORIGINAL:** the original text is kept.
+
+It ends with the percentages. It never calls the model and writes nothing.
+
+On 2026-11-13 the 20 texts of the sample bank page gave **0 %** before and after these changes. The words of that page (solde, frais, banque, bénéficiaire, transfert, compte, paiement, bonjour…) are not in the knowledge base yet. The way forward is the speaker glossary (`data/knowledge/glossaire-a-traduire.csv`, see `data/knowledge/README.md`), not the model.

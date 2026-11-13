@@ -25,7 +25,8 @@ function entry(partial: Partial<KnowledgeEntry> & { sourceText: string; targetTe
   };
 }
 
-const config = engineConfigSchema.parse({ provider: "mock", model: "mock-model", fastModel: "mock-model", maxRetries: 1, batchSize: 5, concurrency: 2 });
+// These tests describe the strict pipeline (unchanged by the assisted mode); assisted mode is tested in modes.test.ts.
+const config = engineConfigSchema.parse({ provider: "mock", model: "mock-model", fastModel: "mock-model", maxRetries: 1, batchSize: 5, concurrency: 2, translationMode: "strict" });
 const noSleep = async () => {};
 
 describe("TranslationEngine (mock provider)", () => {

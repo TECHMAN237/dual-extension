@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DEFAULT_MODELS, PROVIDER_NAMES, engineConfigSchema, type EngineConfig } from "@douala-ai/translation-engine";
+import { DEFAULT_MODELS, PROVIDER_NAMES, TRANSLATION_MODES, engineConfigSchema, type EngineConfig } from "@douala-ai/translation-engine";
 import { resolveKnowledgeFile } from "./paths";
 
 const bool = z
@@ -26,6 +26,8 @@ const envSchema = z.object({
   AI_EFFORT: z.enum(["low", "medium", "high"]).default("low"),
   AI_CACHE_TTL_SECONDS: z.coerce.number().int().min(0).default(21_600),
   AI_ANTHROPIC_SERVER_FALLBACK: bool.default(true),
+  /** strict | assisted (default). See docs/AI_CONFIGURATION.md. */
+  TRANSLATION_MODE: z.enum(TRANSLATION_MODES).default("assisted"),
 
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_ANON_KEY: z.string().optional(),
@@ -129,6 +131,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     cacheTtlSeconds: env.AI_CACHE_TTL_SECONDS,
     effort: env.AI_EFFORT,
     anthropicServerFallback: env.AI_ANTHROPIC_SERVER_FALLBACK,
+    translationMode: env.TRANSLATION_MODE,
   });
 
   return {
@@ -150,6 +153,7 @@ export function describeConfig(config: AppConfig): Record<string, unknown> {
     model: config.engine.model,
     fastModel: config.engine.fastModel,
     fallbackModel: config.engine.fallbackModel ?? null,
+    translationMode: config.engine.translationMode,
     baseUrl: config.engine.baseUrl ?? null,
     storage: config.storage,
     knowledgeFile: config.storage === "memory" ? config.knowledgeFile : null,

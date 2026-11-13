@@ -26,6 +26,13 @@ export interface IngestDocumentOptions {
   csvColumns?: Parameters<typeof extractFromCsv>[1];
   /** When true, entries are returned but not written to the store. */
   dryRun?: boolean;
+  /**
+   * Import as `verified` (a glossary filled in by a Duala speaker). Only allowed for the source
+   * `manual-linguist-entries`; rows without a translation are skipped.
+   */
+  verified?: boolean;
+  /** Name or initials of the speaker who reviewed a verified import (stored in the note). */
+  reviewer?: string;
 }
 
 function inferFormat(contentType: string | null, ref: string): IngestDocumentOptions["format"] {
@@ -40,6 +47,8 @@ function inferFormat(contentType: string | null, ref: string): IngestDocumentOpt
 /**
  * Upsert extracted entries without undoing human review: when an entry with the same
  * (deterministic) id already exists, its validation status, note and extraction date are kept.
+ * Exception: an entry imported as `verified` (a speaker's glossary, see VERIFIED_IMPORT_SOURCE_ID)
+ * is itself a human review, so it upgrades a pending entry.
  */
 export async function writeEntriesKeepingReview(store: KnowledgeStore, entries: KnowledgeEntryInput[]): Promise<void> {
   const ids = entries.map((e) => e.id).filter((id): id is string => Boolean(id));
@@ -47,9 +56,34 @@ export async function writeEntriesKeepingReview(store: KnowledgeStore, entries: 
   await store.upsertEntries(
     entries.map((e) => {
       const prev = e.id ? existing.get(e.id) : undefined;
-      return prev ? { ...e, validationStatus: prev.validationStatus, note: prev.note ?? e.note, extractedAt: prev.extractedAt } : e;
+      if (!prev) return e;
+      if (e.validationStatus === "verified") return { ...e, extractedAt: prev.extractedAt };
+      return { ...e, validationStatus: prev.validationStatus, note: prev.note ?? e.note, extractedAt: prev.extractedAt };
     }),
   );
+}
+
+/** The only source whose files may be imported directly as `verified` (`pnpm ingest --verified`). */
+export const VERIFIED_IMPORT_SOURCE_ID = "manual-linguist-entries";
+
+/**
+ * Mark entries from a speaker-reviewed glossary as verified. Rows without a Duala translation
+ * are dropped (a verified entry must have a target). Throws for any other source.
+ */
+export function asVerifiedImport(source: LinguisticSource, entries: KnowledgeEntryInput[], reviewer?: string): KnowledgeEntryInput[] {
+  if (source.id !== VERIFIED_IMPORT_SOURCE_ID) {
+    throw new Error(`--verified is only allowed for the source "${VERIFIED_IMPORT_SOURCE_ID}" (got "${source.id}"). Dictionary imports stay pending.`);
+  }
+  const date = new Date().toISOString().slice(0, 10);
+  return entries
+    .filter((e) => e.targetText && e.targetText.trim())
+    .map((e) => ({
+      ...e,
+      origin: "verified_source" as const,
+      validationStatus: "verified" as const,
+      note: [e.note, `Verified by a Duala speaker${reviewer ? ` (${reviewer})` : ""}, glossary import ${date}.`].filter(Boolean).join(" — "),
+      tags: [...new Set([...(e.tags ?? []), "speaker-verified"])],
+    }));
 }
 
 /** Ingest a document already in memory (buffer) with a known reference (URL or filename). */
@@ -80,6 +114,13 @@ export async function ingestBuffer(buffer: Buffer, reference: string, contentTyp
     targetLanguage: opts.targetLanguage ?? "dua",
     documentReference: reference,
   });
+  if (opts.verified) {
+    const before = report.entries.length;
+    report.entries = asVerifiedImport(opts.source, report.entries, opts.reviewer);
+    report.skipped += before - report.entries.length;
+    report.extracted = report.entries.length;
+    if (before > report.entries.length) report.warnings.push(`${before - report.entries.length} row(s) without a Duala translation were skipped (a verified entry needs a target).`);
+  }
   if (!opts.dryRun && report.entries.length > 0) {
     await writeEntriesKeepingReview(opts.store, report.entries);
     await opts.store.upsertSource({

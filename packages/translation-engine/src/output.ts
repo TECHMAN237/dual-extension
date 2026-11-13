@@ -66,6 +66,39 @@ function reconcile(output: LlmOutput, expectedIds: string[], raw: string): LlmOu
 }
 
 /**
+ * Word tokens for the anti-invention check: Unicode NFC, lower case, letters with their
+ * combining marks (tones, macron below) kept, apostrophes unified. Diacritics are NOT removed:
+ * a Duala word must be copied exactly as in the reference.
+ */
+export function wordTokens(text: string): string[] {
+  return text
+    .normalize("NFC")
+    .toLowerCase()
+    .replace(/[’ʼ`]/g, "'")
+    .split(/[^\p{L}\p{M}\p{N}']+/u)
+    .map((t) => t.replace(/^'+|'+$/g, ""))
+    .filter((t) => t.length > 0 && /\p{L}/u.test(t));
+}
+
+/**
+ * Anti-invention check for ASSISTED translations. The output is accepted only if
+ *  - it contains at least one Duala word taken from the references given for the segment, and
+ *  - every word is either in the source segment (kept as a loan) or in those references.
+ * Elided forms ("l'argent") may be split by the model: their parts are accepted too.
+ */
+export function checkAssistedTranslation(source: string, translation: string, referenceTargets: string[]): { ok: true; usedTargets: string[] } | { ok: false; reason: string } {
+  const sourceWords = new Set(wordTokens(source).flatMap((t) => [t, ...t.split("'")]));
+  const refWords = new Set(referenceTargets.flatMap((r) => wordTokens(r).flatMap((t) => [t, ...t.split("'")])));
+  const out = wordTokens(translation);
+  const doualaUsed = out.filter((t) => refWords.has(t) && !sourceWords.has(t));
+  if (doualaUsed.length === 0) return { ok: false, reason: "no Duala word from the references" };
+  const unknown = out.filter((t) => !sourceWords.has(t) && !refWords.has(t) && !t.split("'").every((p) => !p || sourceWords.has(p) || refWords.has(p)));
+  if (unknown.length > 0) return { ok: false, reason: `words not in the source nor in the references: ${[...new Set(unknown)].slice(0, 5).join(", ")}` };
+  const used = referenceTargets.filter((r) => wordTokens(r).some((t) => doualaUsed.includes(t)));
+  return { ok: true, usedTargets: used };
+}
+
+/**
  * Sanity checks applied to each translation before it reaches the page:
  * reject empty output, output identical to a placeholder, or output that
  * dropped a protected token (URL, placeholder, number) present in the source.

@@ -33,9 +33,12 @@ describe("scoreEntry", () => {
   it("ranks exact matches above partial ones", () => {
     const exact = scoreEntry("Sign in", entry({ sourceText: "sign in" }))!;
     const partial = scoreEntry("Sign in to continue", entry({ sourceText: "sign in" }))!;
-    const overlap = scoreEntry("Sign in", entry({ sourceText: "sign up" }))!;
+    // "in" is a function word: only "sign" is shared (relevance 0.4 < 0.5), so it is noise now.
+    expect(scoreEntry("Sign in", entry({ sourceText: "sign up" }))).toBeNull();
+    const overlap = scoreEntry("page account settings", entry({ sourceText: "account settings page menu" }))!;
     expect(exact.matchType).toBe("exact");
     expect(partial.matchType).toBe("contained");
+    expect(overlap.matchType).toBe("overlap");
     expect(exact.score).toBeGreaterThan(partial.score);
     expect(partial.score).toBeGreaterThan(overlap.score);
   });

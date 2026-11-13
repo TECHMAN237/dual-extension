@@ -10,10 +10,20 @@ import {
   type TranslationResult,
   type EvidenceLevel,
 } from "@douala-ai/shared";
-import { deriveEvidenceLevel, retrieveReferences, toTranslationReference, type KnowledgeStore, type RankedReference } from "@douala-ai/linguistic-knowledge";
+import { contentTokens, type KnowledgeEntry } from "@douala-ai/shared";
+import {
+  TRANSLATABLE_CATEGORIES,
+  deriveEvidenceLevel,
+  lookupDictionary,
+  retrieveReferences,
+  toTranslationReference,
+  type DictionaryMatch,
+  type KnowledgeStore,
+  type RankedReference,
+} from "@douala-ai/linguistic-knowledge";
 import { TranslationCache } from "./cache";
-import type { EngineConfig } from "./config";
-import { MalformedOutputError, parseLlmOutput, validateTranslationText } from "./output";
+import type { EngineConfig, TranslationMode } from "./config";
+import { MalformedOutputError, checkAssistedTranslation, parseLlmOutput, validateTranslationText } from "./output";
 import { LLM_OUTPUT_JSON_SCHEMA, buildSystemPrompt, buildUserPrompt, toPromptItem, type PromptItem } from "./prompt";
 import { ProviderError, type LlmProvider } from "./providers/types";
 import { createLimiter, withRetry } from "./retry";
@@ -68,9 +78,26 @@ interface WorkItem {
   context: SegmentContext;
   ids: string[];
   refs: RankedReference[];
+  /** Assisted mode: content words of the segment that have a Duala reference. */
+  anchors: { word: string; reference: RankedReference }[];
   result?: Omit<TranslationResult, "id" | "cached">;
   cached: boolean;
 }
+
+/** How a segment will be handled (see TranslationEngine.plan). */
+export type PlanRoute = "dictionary" | "assisted" | "model" | "kept";
+export interface SegmentPlan {
+  text: string;
+  route: PlanRoute;
+  /** Duala text applied directly (route "dictionary"). */
+  translation: string | null;
+  evidence: EvidenceLevel;
+  /** Words with a Duala reference (assisted mode). */
+  anchors: { word: string; duala: string }[];
+  note: string | null;
+}
+
+const asReference = (entry: KnowledgeEntry, matchType: RankedReference["matchType"] = "exact"): RankedReference => ({ entry, relevance: 1, score: 1, matchType });
 
 export class TranslationEngine {
   private readonly cache: TranslationCache;
@@ -85,6 +112,112 @@ export class TranslationEngine {
 
   get isMock(): boolean {
     return this.opts.provider.name === "mock";
+  }
+
+  /**
+   * Effective translation mode. The mock provider keeps the strict pipeline so that the whole
+   * interface can still be exercised with visible "[MOCK dua] …" placeholders without a key.
+   */
+  get mode(): TranslationMode {
+    return this.isMock ? "strict" : this.opts.config.translationMode;
+  }
+
+  /** Apply an exact dictionary entry directly (no model). */
+  private dictionaryResult(text: string, dict: DictionaryMatch): Omit<TranslationResult, "id" | "cached"> {
+    const verified = dict.best.validationStatus === "verified";
+    const others = dict.alternatives.map((a) => `${a.targetText} (${a.sourceName}${a.validationStatus === "verified" ? ", verified" : ""})`);
+    const notes = [
+      verified ? null : "Direct dictionary match, not yet verified by a Duala speaker.",
+      others.length ? `Other translations in the knowledge base: ${others.join("; ")}.` : null,
+    ].filter(Boolean);
+    return {
+      sourceText: text,
+      translatedText: matchCase(text, dict.best.targetText!),
+      status: "translated",
+      evidence: dict.evidence,
+      needsReview: !verified,
+      references: [dict.best, ...dict.alternatives].map((e) => toTranslationReference(asReference(e))),
+      note: notes.length ? notes.join(" ") : null,
+    };
+  }
+
+  /** Assisted mode: content words of the segment that have an exact Duala entry, plus contained phrases. */
+  private async anchorsFor(text: string, refs: RankedReference[], sourceLanguage: SourceLanguageCode, targetLanguage: TargetLanguageCode): Promise<WorkItem["anchors"]> {
+    const anchors: WorkItem["anchors"] = [];
+    const seen = new Set<string>();
+    // Capitalised words after the first word ("Safinum Pay", "Banque Atlantique") are treated as
+    // proper names or brands: they stay as written and never anchor a translation.
+    const properNames = new Set(
+      text
+        .split(/\s+/)
+        .slice(1)
+        .filter((w) => /^\p{Lu}/u.test(w))
+        .flatMap((w) => contentTokens(w)),
+    );
+    for (const word of [...new Set(contentTokens(text))].filter((t) => !properNames.has(t))) {
+      const hit = await lookupDictionary(this.opts.store, word, { sourceLanguage, targetLanguage });
+      if (hit && !seen.has(hit.best.id)) {
+        seen.add(hit.best.id);
+        anchors.push({ word, reference: asReference(hit.best, "contained") });
+      }
+    }
+    for (const r of refs) {
+      if (!r.entry.targetText || !TRANSLATABLE_CATEGORIES.has(r.entry.category) || r.entry.category === "sentence_example") continue;
+      if ((r.matchType === "contained" || r.matchType === "exact") && !seen.has(r.entry.id)) {
+        seen.add(r.entry.id);
+        anchors.push({ word: r.entry.sourceText, reference: r });
+      }
+    }
+    return anchors;
+  }
+
+  /**
+   * Decide how one segment is handled, without calling the model:
+   * dictionary hit → applied directly; assisted mode without any anchored word → original kept;
+   * otherwise the segment goes to the model (with the references it may use).
+   */
+  private async prepare(w: WorkItem, sourceLanguage: SourceLanguageCode, targetLanguage: TargetLanguageCode): Promise<"dictionary" | "kept" | "model"> {
+    const { store, config } = this.opts;
+    const dict = await lookupDictionary(store, w.text, { sourceLanguage, targetLanguage });
+    if (dict) {
+      w.result = this.dictionaryResult(w.text, dict);
+      return "dictionary";
+    }
+    w.refs = await retrieveReferences(store, w.text, { sourceLanguage, targetLanguage, limit: config.maxReferencesPerItem });
+    if (this.mode === "assisted") {
+      w.anchors = await this.anchorsFor(w.text, w.refs, sourceLanguage, targetLanguage);
+      if (w.anchors.length === 0) {
+        w.result = { sourceText: w.text, translatedText: null, status: "uncertain", evidence: "unverified", needsReview: true, references: [], note: "No content word of this text has a Duala reference: original text kept." };
+        return "kept";
+      }
+      // Anchored words first so they are always part of the prompt.
+      const ids = new Set(w.anchors.map((a) => a.reference.entry.id));
+      w.refs = [...w.anchors.map((a) => a.reference), ...w.refs.filter((r) => !ids.has(r.entry.id))].slice(0, Math.max(config.maxReferencesPerItem, w.anchors.length));
+    }
+    return "model";
+  }
+
+  /** Coverage analysis: how each text would be handled (no model call, nothing cached). */
+  async plan(texts: string[], sourceLanguage: SourceLanguageCode, targetLanguage: TargetLanguageCode = "dua"): Promise<SegmentPlan[]> {
+    const out: SegmentPlan[] = [];
+    for (const raw of texts) {
+      const text = normalizeWhitespace(raw);
+      if (isUntranslatableText(text)) {
+        out.push({ text, route: "kept", translation: null, evidence: "unverified", anchors: [], note: "Not translatable (identifier, number, URL or email)." });
+        continue;
+      }
+      const w: WorkItem = { key: "", text, context: "other", ids: [], refs: [], anchors: [], cached: false };
+      const route = await this.prepare(w, sourceLanguage, targetLanguage);
+      out.push({
+        text,
+        route: route === "model" ? (this.mode === "assisted" ? "assisted" : "model") : route,
+        translation: route === "dictionary" ? (w.result?.translatedText ?? null) : null,
+        evidence: route === "dictionary" ? w.result!.evidence : route === "model" && this.mode === "assisted" ? "low" : "unverified",
+        anchors: w.anchors.map((a) => ({ word: a.word, duala: a.reference.entry.targetText ?? "" })),
+        note: w.result?.note ?? null,
+      });
+    }
+    return out;
   }
 
   get cacheSize(): number {
@@ -116,10 +249,10 @@ export class TranslationEngine {
         skipped.push({ id: item.id, sourceText: item.text, translatedText: null, status: "skipped", evidence: "unverified", needsReview: false, references: [], note: "Not translatable (identifier, number, URL or email).", cached: false });
         continue;
       }
-      const key = TranslationCache.key(text, sourceLanguage, targetLanguage, item.context, provider.name);
+      const key = TranslationCache.key(text, sourceLanguage, targetLanguage, item.context, `${provider.name}:${this.mode}`);
       const existing = work.get(key);
       if (existing) existing.ids.push(item.id);
-      else work.set(key, { key, text, context: item.context, ids: [item.id], refs: [], cached: false });
+      else work.set(key, { key, text, context: item.context, ids: [item.id], refs: [], anchors: [], cached: false });
     }
 
     // 2. Cache lookup.
@@ -131,28 +264,18 @@ export class TranslationEngine {
       }
     }
 
-    // 3. Retrieval for uncached items; verified exact matches short-circuit the model.
+    // 3. Dictionary layer and retrieval for uncached items:
+    //    - an exact dictionary entry with a Duala text is applied directly, without the model;
+    //    - assisted mode: segments without any anchored content word keep their original text;
+    //    - everything else goes to the model with its references.
     const pending: WorkItem[] = [];
     await Promise.all(
       [...work.values()]
         .filter((w) => !w.result)
         .map(async (w) => {
-          w.refs = await retrieveReferences(store, w.text, { sourceLanguage, targetLanguage, limit: config.maxReferencesPerItem });
-          const exact = w.refs.find((r) => r.matchType === "exact" && r.entry.validationStatus === "verified" && r.entry.targetText);
-          if (exact) {
-            w.result = {
-              sourceText: w.text,
-              translatedText: matchCase(w.text, exact.entry.targetText!),
-              status: "translated",
-              evidence: "high",
-              needsReview: false,
-              references: [toTranslationReference(exact)],
-              note: null,
-            };
-            this.cache.set(w.key, w.result);
-          } else {
-            pending.push(w);
-          }
+          const route = await this.prepare(w, sourceLanguage, targetLanguage);
+          if (route === "model") pending.push(w);
+          else this.cache.set(w.key, w.result!);
         }),
     );
 
@@ -210,6 +333,27 @@ export class TranslationEngine {
     if (out.translation === null) {
       return { sourceText: w.text, translatedText: null, status: "uncertain", evidence: "unverified", needsReview: true, references: supporting.map(toTranslationReference), note: out.note ?? "Insufficient linguistic evidence." };
     }
+    if (this.mode === "assisted") {
+      // Anti-invention: every word must come from the segment (loan) or from its references,
+      // and at least one Duala word from the references must be present.
+      const withTarget = w.refs.filter((r) => r.entry.targetText);
+      const check2 = checkAssistedTranslation(w.text, out.translation, withTarget.map((r) => r.entry.targetText!));
+      if (!check2.ok) {
+        this.logger.warn({ reason: check2.reason }, "assisted translation rejected by the anti-invention check");
+        return { sourceText: w.text, translatedText: null, status: "uncertain", evidence: "unverified", needsReview: true, references: withTarget.map(toTranslationReference), note: `Assisted output rejected (anti-invention check): ${check2.reason}. Original text kept.` };
+      }
+      const used = withTarget.filter((r) => check2.usedTargets.includes(r.entry.targetText!));
+      return {
+        sourceText: w.text,
+        translatedText: out.translation,
+        status: "translated",
+        // Assisted translations are at best "low" evidence and always need a speaker's review.
+        evidence: weakerEvidence("low", out.evidence === "unverified" ? "unverified" : "low"),
+        needsReview: true,
+        references: used.map(toTranslationReference),
+        note: ["Assisted translation: words without a Duala reference were kept as loans.", out.note].filter(Boolean).join(" "),
+      };
+    }
     return {
       sourceText: w.text,
       translatedText: out.translation,
@@ -224,7 +368,7 @@ export class TranslationEngine {
   private async runBatch(items: PromptItem[], tier: "fast" | "capable", source: SourceLanguageCode, target: TargetLanguageCode, domain?: string) {
     const { config, provider } = this.opts;
     const ids = items.map((i) => i.id);
-    const system = buildSystemPrompt(source, target);
+    const system = buildSystemPrompt(source, target, this.mode);
     const user = buildUserPrompt(items, source, target, domain);
     const maxTokens = Math.min(16_000, 400 + items.reduce((n, i) => n + i.text.length * 3, 0));
     const primaryModel = modelForTier(config, tier);

@@ -4,13 +4,25 @@
  * Usage:
  *   pnpm ingest --source <sourceId> --url <https://...> --lang fr [--format html|pdf|csv|json|text] [--strategy auto|table|dl|lines] [--dry-run]
  *   pnpm ingest --source <sourceId> --file <path> --lang fr [--format ...]
+ *   pnpm ingest --source manual-linguist-entries --file glossaire.csv --lang fr --verified [--reviewer "Name"]
  *
- * Everything ingested is stored as `pending` / `extracted_unverified`.
+ * Everything ingested is stored as `pending` / `extracted_unverified`, except with --verified:
+ * a glossary filled in by a Duala speaker (source manual-linguist-entries only) is stored as
+ * `verified`; rows without a Duala translation are skipped.
  */
-import { readFileSync } from "node:fs";
-import { ingestBuffer, ingestUrl, loadSeedSources } from "@douala-ai/linguistic-knowledge";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { VERIFIED_IMPORT_SOURCE_ID, ingestBuffer, ingestUrl, loadSeedSources } from "@douala-ai/linguistic-knowledge";
 import { createContainer } from "../container";
 import { loadConfig } from "../config";
+import { findRepoRoot } from "../paths";
+
+/** `pnpm ingest` runs in apps/backend: resolve --file from where the command was typed (INIT_CWD), then the repo root. */
+function resolveInputFile(file: string): string {
+  if (path.isAbsolute(file)) return file;
+  const candidates = [process.env.INIT_CWD, process.cwd(), findRepoRoot()].filter((d): d is string => Boolean(d)).map((d) => path.resolve(d, file));
+  return candidates.find((c) => existsSync(c)) ?? candidates[0]!;
+}
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -26,8 +38,13 @@ async function main() {
   const format = arg("format") as "html" | "pdf" | "csv" | "json" | "text" | undefined;
   const strategy = arg("strategy") as "auto" | "table" | "dl" | "lines" | undefined;
   if (!sourceId || (!url && !file) || !lang) {
-    console.error("Usage: pnpm ingest --source <sourceId> (--url <url> | --file <path>) --lang <en|fr> [--format html|pdf|csv|json|text] [--strategy auto|table|dl|lines] [--source-column 0 --target-column 1] [--dry-run]");
+    console.error("Usage: pnpm ingest --source <sourceId> (--url <url> | --file <path>) --lang <en|fr> [--format html|pdf|csv|json|text] [--strategy auto|table|dl|lines] [--source-column 0 --target-column 1] [--dry-run] [--verified --reviewer <name>]");
     console.error(`Known seed sources: ${loadSeedSources().map((s) => s.id).join(", ")}`);
+    process.exit(1);
+  }
+  const verified = flag("verified");
+  if (verified && sourceId !== VERIFIED_IMPORT_SOURCE_ID) {
+    console.error(`--verified is only allowed with --source ${VERIFIED_IMPORT_SOURCE_ID} (a glossary filled in by a Duala speaker). Dictionary imports always stay pending.`);
     process.exit(1);
   }
   const config = loadConfig();
@@ -42,8 +59,8 @@ async function main() {
     source = await c.store.upsertSource(seed);
   }
   const html = { strategy: strategy ?? "auto", sourceColumn: Number(arg("source-column") ?? 0), targetColumn: Number(arg("target-column") ?? 1) };
-  const opts = { store: c.store, source, sourceLanguage: lang, format, html, dryRun: flag("dry-run") };
-  const report = url ? await ingestUrl(url, opts) : await ingestBuffer(readFileSync(file!), file!, null, opts);
+  const opts = { store: c.store, source, sourceLanguage: lang, format, html, dryRun: flag("dry-run"), verified, reviewer: arg("reviewer") };
+  const report = url ? await ingestUrl(url, opts) : await ingestBuffer(readFileSync(resolveInputFile(file!)), file!, null, opts);
   console.log(JSON.stringify({ sourceId: report.sourceId, extracted: report.extracted, skipped: report.skipped, warnings: report.warnings, sample: report.entries.slice(0, 5) }, null, 2));
   if (flag("dry-run")) console.log("Dry run: nothing written.");
 }

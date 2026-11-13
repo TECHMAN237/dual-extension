@@ -84,6 +84,8 @@ douala-ai/
 | `pnpm ai:test-connection` | Verify the configured AI provider |
 | `pnpm ingest --source <id> --url <url> --lang fr` | Ingest a linguistic resource (see `docs/LINGUISTIC_RESEARCH.md`) |
 | `pnpm ingest:site --site mboasawa\|wiktionary-fr\|wiktionary-en [--dry-run]` | Crawl a dictionary with its dedicated, rate-limited extractor into `data/knowledge/douala.json` |
+| `pnpm ingest --source manual-linguist-entries --file <glossaire.csv> --lang fr --format csv --verified` | Import a glossary filled in by a Duala speaker as verified entries (`data/knowledge/README.md`) |
+| `pnpm coverage:check [--file texts.txt] [--mode assisted\|strict]` | Show how each text would be translated (dictionary / assisted / original kept), without calling the model |
 | `pnpm --filter @douala-ai/backend seed` | Seed the source registry into the configured store |
 | `pnpm e2e:live` | Live end-to-end check (built content script + backend, needs Playwright Chromium) |
 | `pnpm e2e:extension` | Loads the real unpacked extension in Chromium and runs Scan, Translate, Restore |

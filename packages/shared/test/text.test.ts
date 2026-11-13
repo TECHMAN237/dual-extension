@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectSourceLanguage, isUntranslatableText, normalizeForLookup, translateBatchRequestSchema } from "../src";
+import { contentTokens, detectSourceLanguage, dictionaryKey, isUntranslatableText, normalizeForLookup, tokenize, translateBatchRequestSchema } from "../src";
 
 describe("isUntranslatableText", () => {
   it("skips URLs, emails, numbers and identifiers", () => {
@@ -14,12 +14,39 @@ describe("isUntranslatableText", () => {
     expect(isUntranslatableText("Sign in")).toBe(false);
     expect(isUntranslatableText("Welcome to our website")).toBe(false);
     expect(isUntranslatableText("Rechercher")).toBe(false);
+    // A sentence-final period does not turn a word into an identifier.
+    expect(isUntranslatableText("Payer.")).toBe(false);
+    expect(isUntranslatableText("file.txt")).toBe(true);
   });
 });
 
 describe("normalizeForLookup", () => {
   it("lower-cases, strips accents and punctuation", () => {
     expect(normalizeForLookup("  Bienvenue, à  TOUS ! ")).toBe("bienvenue a tous");
+  });
+});
+
+describe("tokenize / contentTokens / dictionaryKey", () => {
+  it("splits elisions and drops function words", () => {
+    expect(tokenize("l'huilerie")).toEqual(["l", "huilerie"]);
+    expect(contentTokens("Consulter les frais")).toEqual(["consulter", "frais"]);
+    expect(contentTokens("Votre compte")).toEqual(["compte"]);
+    expect(contentTokens("le compte-rendu")).toEqual(["compte", "rendu"]);
+    expect(contentTokens("Sign in to your account")).toEqual(["sign", "account"]);
+  });
+  it("normalises case, accents, final punctuation, leading articles and simple plurals", () => {
+    expect(dictionaryKey("Payer.")).toBe(dictionaryKey("payer"));
+    expect(dictionaryKey("Bénéficiaire !")).toBe("beneficiaire");
+    expect(dictionaryKey("le solde")).toBe(dictionaryKey("Solde"));
+    expect(dictionaryKey("l'huilerie")).toBe("huilerie");
+    expect(dictionaryKey("Transferts")).toBe(dictionaryKey("un transfert"));
+    expect(dictionaryKey("les frais")).toBe(dictionaryKey("Frais"));
+    expect(dictionaryKey("to buy")).toBe("buy");
+    expect(dictionaryKey("Compte courant")).not.toBe(dictionaryKey("le compte-rendu"));
+    expect(dictionaryKey("bus")).toBe("bus");
+    // Short words ending in -s are not reduced: "pays" (country) must not become "pay".
+    expect(dictionaryKey("pays")).toBe("pays");
+    expect(dictionaryKey("Pay")).not.toBe(dictionaryKey("pays"));
   });
 });
 
