@@ -1,0 +1,15 @@
+{
+  "attribution": "Extracts from Wiktionary (en.wiktionary.org), CC BY-SA 4.0, Wiktionary contributors. Fetched through the MediaWiki API on 2026-11-13, trimmed to the Duala section and neighbouring headings.",
+  "pages": [
+    {
+      "title": "bongo̱si",
+      "revid": 92284224,
+      "wikitext": "==Duala==\n[[File:Lophira alata illustration.jpg|thumb|250px|{{lang|dua|bongo̱si}}]]\n\n===Alternative forms===\n* {{l|dua|bongosi}},<ref>{{cite-book|fr|last=Bertin|first=André|authorlink=:fr:André Bertin|year=1920|title=Les bois du Cameroun|series=Mission d’études forestières envoyée dans les colonies françaises par les ministères de la guerre, de l’armement et des colonies, 4|url=https://google.com/books/edition/Mission_d_études_forestières_envoyée/-tWULhfXZG8C?hl=en&gbpv=1&bsq=bongosi+Douala&dq=bongosi+Douala&printsec=frontcover|location=Paris|publisher=Émile Larose|pages=112, 124}}</ref> {{l|dua|bongossi}} <ref name=\"NSY\">{{cite-book|ja|editor=熱帯植物研究会 (Nettai-shokubutsu-kenkyūkai)|chapter=アソベ ''Lophira alata'' B{{smallcaps|anks}} ex G{{smallcaps|aertn}}.f.（''L. procera'' A.C{{smallcaps|hev}}.）|title=熱帯植物要覧 (Nettai-shokubutsu-yōran)|edition=4th|location=Tōkyō|publisher=養賢堂 (Yōkendō)|year=1996|page=94|isbn=4-924395-03-X}}</ref>\n\n===Pronunciation===\n* {{IPA|dua|/bònɡɔ̀sí/}}\n\n===Noun===\n{{head|dua|noun|plural|[[mingo̱si]]}}\n\n# [[red ironwood]], {{vern|meni oil tree}} ({{taxlink|Lophira alata|species}})<ref>{{R:Helmlinger1972|head=bongo̱sí|p=49}}</ref>\n\n===References===\n{{reflist}}\n\n{{C|dua|Trees}}\n"
+    },
+    {
+      "title": "ndabo",
+      "revid": 92176939,
+      "wikitext": "==Benga==\n\n===Etymology===\n{{inh+|bng|bnt-pro|*dágò|*dábò}}.\n\n==Duala==\n\n===Etymology===\n{{inh+|dua|bnt-pro|*dágò|*dábò}}.\n\n===Pronunciation===\n* {{IPA|dua|/ndábò/}}\n\n===Noun===\n{{head|dua|noun|plural|[[mandabo]]}}\n\n# [[house]]<ref name=\"ph1972\">{{R:Helmlinger1972|head=ndábo|p=342}}</ref>\n# [[building]]\n#: {{syn|dua|bolongi}}\n\n====Derived terms====\n{{col|dua\n|ndabo a baboedi<t:a hospital>\n|ndabo a beboa<t:a prison>\n|ndabo a ekotedi<t:a granary>\n|ndabo a mbusa<pos:n>\n|ndabo a mitin,ndabo a Loba<t:a religious facility>\n|ndabo a muka<t:a tribunal>\n}}\n\n===References===\n{{reflist}}\n\n{{C|dua|Architecture}}\n"
+    }
+  ]
+}

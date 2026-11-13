@@ -1,30 +1,19 @@
 # Deployment
 
-In production the backend runs on **Render** (free plan) with its data in **Supabase**, and the extension uses that server by default. Nobody needs to run `pnpm dev:backend` to use the extension: that command is only for development.
+In production the backend runs on **Render** (free plan) and the extension uses that server by default. The knowledge base (Duala words and their sources) is a **file versioned in Git**, `data/knowledge/douala.json`, shipped with the code. There is no database. Nobody needs to run `pnpm dev:backend` to use the extension: that command is only for development.
 
 | Mode | Backend | Storage | Extension default |
 | --- | --- | --- | --- |
-| Production | Render web service `douala-ai-backend` | Supabase (PostgreSQL) | `VITE_DEFAULT_BACKEND_URL` from `apps/extension/.env.production` |
-| Development | `pnpm dev:backend` on http://localhost:8787 | memory + `apps/backend/data/local-knowledge.json` | http://localhost:8787 (build without `.env.production`, or change it in Settings) |
+| Production | Render web service `douala-ai-backend` | `data/knowledge/douala.json` from the deployed commit, in memory (`ALLOW_EPHEMERAL_STORAGE=true`) | `VITE_DEFAULT_BACKEND_URL` from `apps/extension/.env.production` |
+| Development | `pnpm dev:backend` on http://localhost:8787 | the same file, written back on changes (commit it) | http://localhost:8787 (build without `.env.production`, or change it in Settings) |
 
-## 1. Supabase (database)
+## 1. Storage: the knowledge base lives in Git
 
-Render's free plan wipes the disk on every restart and puts the server to sleep after 15 minutes without traffic, so validated words, corrections, history and usage must live in Supabase. With `NODE_ENV=production` the backend **refuses to start** without `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` (set `ALLOW_EPHEMERAL_STORAGE=true` only for a throw-away test).
-
-1. Go to https://supabase.com → **Sign in** (GitHub works) → **New project**.
-   - Organization: your personal one. Name: `douala-ai`. Database password: click *Generate a password* and keep it in a password manager (the backend does not need it).
-   - Region: the one closest to Render's region (for example *West EU* for Render *Frankfurt*). Plan: **Free**. Click **Create new project** and wait about 2 minutes.
-2. Left sidebar → **SQL Editor** → **New query**. Open `supabase/migrations/0001_initial.sql` from this repository, copy **all** of it, paste it, then click **Run**. If Supabase warns about "destructive operations" (the script drops and re-creates triggers/policies so it can be re-run), confirm with *Run this query*. Expected result: *Success. No rows returned*.
-   - `0002_embeddings.sql` is optional and not needed (semantic search is not wired yet).
-   - Check: left sidebar → **Table Editor** shows `languages` (3 rows), `linguistic_knowledge`, `corrections`, `translation_history`, `api_usage`, …
-3. Copy the two values the backend needs:
-   - **Project URL**: top bar **Connect** (or *Project Settings → Data API*), looks like `https://abcdefghijkl.supabase.co` → this is `SUPABASE_URL`.
-   - **Service role key**: *Project Settings → API Keys*. Use the **`service_role`** key (tab *Legacy API keys*, click *Reveal*) or a **secret key** (`sb_secret_…`). This is `SUPABASE_SERVICE_ROLE_KEY`. It bypasses Row Level Security: paste it only into Render, never into the extension, a chat, an issue or a commit.
-   - Do **not** use the `anon` / publishable key: with RLS it can only read verified vocabulary, so the backend could not save corrections.
-
-On its first start with an empty database the backend seeds the source registry and the UI term list automatically (log line `empty Supabase database seeded`). `pnpm --filter @douala-ai/backend seed` does the same by hand and is safe to repeat.
-
-Supabase free projects are **paused after 7 days without activity**; data is kept. If the extension reports Supabase errors after a long break, open the project on supabase.com and click **Restore project**.
+- **Source of truth:** `data/knowledge/douala.json` at the repository root (see `data/knowledge/README.md` for the format and licences). The backend resolves the path from the repository root, so it is found both locally and on Render, where the server starts in `apps/backend`. `LOCAL_KNOWLEDGE_FILE` can point elsewhere (absolute, or relative to the repository root).
+- **At startup** the backend loads the file: sources, imported dictionary entries (all `pending`) and the interface terms.
+- **Changing it:** run an ingestion (`pnpm ingest:site …`, `pnpm ingest …`) or edit the file locally, check `git diff`, then commit and push. Render redeploys and the server loads the new file. The file is written in a stable order (sorted by id, 2-space indentation) so diffs stay readable.
+- **On Render** writes are still possible (admin approvals, accepted corrections, usage counters). They live in memory, and in the deployment's copy of the file, until the next restart, sleep or deploy, when the free disk is wiped. **This is intended:** a lasting change must be made in the repository. That is why `render.yaml` sets `ALLOW_EPHEMERAL_STORAGE="true"`; with `NODE_ENV=production` the backend refuses to start without it (unless Supabase is configured).
+- **Supabase (not used).** The Supabase code and `supabase/migrations/` are kept as a possible future option for shared, persistent writes. Nothing in the normal setup needs a Supabase account, and `render.yaml` sets no Supabase variable. To switch one day, create a project, run `supabase/migrations/0001_initial.sql`, set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on Render, and remove `ALLOW_EPHEMERAL_STORAGE`.
 
 ## 2. Backend on Render
 
@@ -38,7 +27,8 @@ Supabase free projects are **paused after 7 days without activity**; data is kep
 | Start | `cd apps/backend && node dist/index.js` |
 | Health check | `/api/health` |
 | AI | `AI_PROVIDER=openrouter`, `AI_MODEL` / `AI_FAST_MODEL=google/gemma-4-31b-it:free`, `AI_FALLBACK_MODEL=google/gemma-4-26b-a4b-it:free`, `AI_BASE_URL=https://openrouter.ai/api/v1` |
-| Secrets you type in the dashboard (`sync: false`) | `AI_API_KEY` (OpenRouter key), `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` |
+| Secret you type in the dashboard (`sync: false`) | `AI_API_KEY` (OpenRouter key) |
+| Storage | `ALLOW_EPHEMERAL_STORAGE="true"`: knowledge base from `data/knowledge/douala.json`, no Supabase |
 | Generated by Render | `ADMIN_API_TOKEN` (protects `/admin/` and `/api/admin/*`) |
 | CORS | `CORS_ALLOWED_ORIGINS=chrome-extension://egmamnfapihdpbmnamooaabbafmncpbh` |
 
@@ -54,18 +44,17 @@ Supabase free projects are **paused after 7 days without activity**; data is kep
 2. Dashboard → **New +** → **Blueprint**.
 3. *Connect a repository*: pick **TECHMAN237/dual-extension**. If it is not listed, click *Configure account* → GitHub → *Only select repositories* → add `dual-extension` → *Save*, then come back.
 4. Blueprint name: `douala-ai`. Branch: `main`. Render reads `render.yaml` and lists the service `douala-ai-backend` (Free).
-5. Fill the three fields Render asks for:
-   - `AI_API_KEY` → your OpenRouter key (`sk-or-…`, from https://openrouter.ai/keys);
-   - `SUPABASE_URL` → the Project URL from step 1.3;
-   - `SUPABASE_SERVICE_ROLE_KEY` → the service_role / secret key from step 1.3.
+5. Fill the one field Render asks for: `AI_API_KEY` → your OpenRouter key (`sk-or-…`, from https://openrouter.ai/keys).
 6. Click **Deploy Blueprint** (*Apply*). The first build takes a few minutes; the *Events* tab shows `Deploy live`.
+
+   **Existing service created with an older `render.yaml`:** open **douala-ai-backend → Environment**, delete `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` if present, make sure `ALLOW_EPHEMERAL_STORAGE` = `true`, then *Save, rebuild and deploy* (or *Blueprints → douala-ai → Sync* to apply `render.yaml`).
 7. Open the service **douala-ai-backend**: its URL is shown under the name, normally `https://douala-ai-backend.onrender.com` (Render adds a suffix such as `-x1y2` if the name is taken). Check it:
 
    ```bash
    curl https://douala-ai-backend.onrender.com/api/health
    ```
 
-   Expect `"provider":"openrouter"`, `"storage":"supabase"`, `"mock":false`.
+   Expect `"provider":"openrouter"`, `"storage":"memory"`, `"mock":false` and `"knowledgeEntries"` equal to the number of entries in `data/knowledge/douala.json`.
 
 To change a value later: service → **Environment** → edit → *Save, rebuild and deploy*. The admin token is under the same page (`ADMIN_API_TOKEN`, *reveal*); the admin page is `https://<service>.onrender.com/admin/`.
 
@@ -87,7 +76,7 @@ cd apps/backend && AI_PROVIDER=mock PORT=10000 node dist/index.js      # develop
 curl http://localhost:10000/api/health
 ```
 
-For a production-like run use `NODE_ENV=production AI_PROVIDER=openrouter AI_API_KEY=… ADMIN_API_TOKEN=…` plus the Supabase variables (or `ALLOW_EPHEMERAL_STORAGE=true` for a throw-away test). `npm install -g` may need an administrator terminal on Windows; skip it if `pnpm --version` already prints 10.28.0. `node dist/index.js` does not read `apps/backend/.env`: pass variables in the shell (or use `pnpm --filter @douala-ai/backend start`, which loads `.env`).
+For a production-like run use `NODE_ENV=production ALLOW_EPHEMERAL_STORAGE=true AI_PROVIDER=openrouter AI_API_KEY=… ADMIN_API_TOKEN=…`. `npm install -g` may need an administrator terminal on Windows; skip it if `pnpm --version` already prints 10.28.0. `node dist/index.js` does not read `apps/backend/.env`: pass variables in the shell (or use `pnpm --filter @douala-ai/backend start`, which loads `.env`).
 
 ## 3. Extension pointing at the server
 

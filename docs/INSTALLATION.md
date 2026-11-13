@@ -39,7 +39,7 @@ Open `apps/backend/.env` in a text editor.
 
 - To try the interface without a key, leave `AI_PROVIDER=mock`.
 - For real translations, set `AI_PROVIDER=anthropic` (or `openai`) and paste your key into `AI_API_KEY=`. See `docs/AI_CONFIGURATION.md` for models and options.
-- Leave the Supabase lines empty for now (local mode). See `docs/DATABASE.md` when you want cloud storage.
+- No database is needed: the knowledge base is the versioned file `data/knowledge/douala.json`, loaded automatically. Leave the Supabase lines commented out.
 
 Test the AI connection (optional, only with a real provider):
 
@@ -116,7 +116,7 @@ AI provider keys are **never** entered in the extension; they live only in `apps
 | Popup shows *Offline* (online server) | Wrong Backend URL (Settings → *Utiliser le serveur par défaut*), Render service suspended or failing (Render dashboard → Logs), or CORS: the extension id on `chrome://extensions` must match `CORS_ALLOWED_ORIGINS` in Render. |
 | Popup shows *Offline* (development) | The local backend is not running: `pnpm dev:backend`, and Backend URL = `http://localhost:8787`. |
 | Popup stays on *Réveil du serveur…* | Normal for up to 60 s after 15 min of inactivity on Render's free plan. |
-| Backend exits with "Configuration problems" | Read the message: usually `AI_API_KEY` is missing for the chosen provider, or Supabase variables are incomplete. |
+| Backend exits with "Configuration problems" | Read the message: usually `AI_API_KEY` is missing for the chosen provider, or (with `NODE_ENV=production`) `ALLOW_EPHEMERAL_STORAGE=true` is not set. |
 | Translations are `[MOCK dua] …` | You are in mock mode. Set `AI_PROVIDER` and `AI_API_KEY`, restart the backend. |
 | Most segments say "kept original" with a real provider | Expected while the knowledge base is empty: the model is told not to invent Douala. Import verified vocabulary via the admin page or `pnpm ingest`. |
 | `429 Too many requests` | Rate limit reached; wait a minute or raise `RATE_LIMIT_MAX`. |

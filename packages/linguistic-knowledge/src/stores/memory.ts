@@ -7,15 +7,32 @@ import type { KnowledgeEntryInput, KnowledgeSearchOptions, KnowledgeStore } from
 
 interface PersistedState {
   version: 1;
-  entries: KnowledgeEntry[];
   sources: LinguisticSource[];
+  entries: KnowledgeEntry[];
 }
 
 export interface InMemoryKnowledgeStoreOptions {
   /** Optional JSON file used to persist the store between restarts (local mode). */
   persistPath?: string;
+  /** Load `persistPath` but never write it back (tests, read-only deployments). */
+  readOnly?: boolean;
   seedEntries?: KnowledgeEntry[];
   seedSources?: LinguisticSource[];
+}
+
+const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * Stable JSON for the knowledge file: sources and entries sorted by id, keys in schema order,
+ * 2-space indentation, trailing newline. Re-saving unchanged data produces an identical file.
+ */
+export function serializeKnowledgeState(entries: KnowledgeEntry[], sources: LinguisticSource[]): string {
+  const state: PersistedState = {
+    version: 1,
+    sources: [...sources].map((s) => linguisticSourceSchema.parse(s)).sort(byId),
+    entries: [...entries].map((e) => knowledgeEntrySchema.parse(e)).sort(byId),
+  };
+  return `${JSON.stringify(state, null, 2)}\n`;
 }
 
 /**
@@ -29,10 +46,12 @@ export class InMemoryKnowledgeStore implements KnowledgeStore {
   /** token -> entry ids (inverted index for candidate lookup). */
   private index = new Map<string, Set<string>>();
   private persistPath: string | undefined;
+  private readOnly: boolean;
   private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(options: InMemoryKnowledgeStoreOptions = {}) {
     this.persistPath = options.persistPath;
+    this.readOnly = options.readOnly ?? false;
     for (const s of options.seedSources ?? []) this.sources.set(s.id, s);
     for (const e of options.seedEntries ?? []) this.addToIndex(e);
   }
@@ -75,18 +94,19 @@ export class InMemoryKnowledgeStore implements KnowledgeStore {
     this.entries.delete(entry.id);
   }
 
+  /** Serialise the store deterministically so the versioned file gives readable Git diffs. */
+  serialize(): string {
+    return serializeKnowledgeState([...this.entries.values()], [...this.sources.values()]);
+  }
+
   private persist(): Promise<void> {
-    if (!this.persistPath) return Promise.resolve();
+    if (!this.persistPath || this.readOnly) return Promise.resolve();
     const p = this.persistPath;
-    const snapshot: PersistedState = {
-      version: 1,
-      entries: [...this.entries.values()],
-      sources: [...this.sources.values()],
-    };
+    const content = this.serialize();
     this.writeQueue = this.writeQueue.then(async () => {
       await fs.mkdir(path.dirname(p), { recursive: true });
       const tmp = `${p}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(snapshot, null, 2), "utf8");
+      await fs.writeFile(tmp, content, "utf8");
       await fs.rename(tmp, p);
     });
     return this.writeQueue;

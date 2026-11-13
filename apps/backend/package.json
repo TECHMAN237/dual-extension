@@ -12,7 +12,8 @@
     "test": "vitest run",
     "ingest": "tsx --env-file-if-exists=.env src/cli/ingest.ts",
     "ai:test-connection": "tsx --env-file-if-exists=.env src/cli/test-connection.ts",
-    "seed": "tsx --env-file-if-exists=.env src/cli/seed.ts"
+    "seed": "tsx --env-file-if-exists=.env src/cli/seed.ts",
+    "ingest:site": "tsx --env-file-if-exists=.env src/cli/ingest-site.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

@@ -5,10 +5,13 @@
     "url": "https://dictionnaireduala.com/",
     "type": "online_dictionary",
     "reliability": "unknown",
-    "languages": ["dua", "fr"],
-    "accessibility": "blocked_in_build_environment",
-    "license": null,
-    "notes": "Resource 1 shared by Achille Mbozeko by email on 2026-11-12 (subject: 'Résultats des recherches sur le hackaton'). Described as an online Duala <-> French dictionary. The host could not be reached from the build environment (network policy), so its structure, licence and reliability have NOT been verified. Run `pnpm ingest --source dictionnaireduala-com --url <page>` once network access is available, after checking the site's terms of use.",
+    "languages": [
+      "dua",
+      "fr"
+    ],
+    "accessibility": "restricted",
+    "license": "All rights reserved (Mentions légales, read 2026-11-13): dictionary entries and lexical databases are the exclusive property of Philippe Mbappé Bessémè; consultation for personal, teaching or research use only; reasonable quotations with citation allowed; any substantial reproduction or reuse requires the publisher's prior written permission.",
+    "notes": "NOT EXTRACTED. Inspected 2026-11-13: no robots.txt (404); the legal notice (mentions-legales.html) forbids substantial reuse of the dictionary entries without written permission, so automated extraction was refused. Editor: Philippe Mbappé Bessémè (Dictionnaire Idiba, AGLC orthography). Use for manual look-ups only, or ask the publisher for a licence via the site's contact page.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
   },
@@ -18,23 +21,29 @@
     "url": "https://fr.glosbe.com/fr/dua",
     "type": "translation_platform",
     "reliability": "community",
-    "languages": ["fr", "dua"],
-    "accessibility": "blocked_in_build_environment",
+    "languages": [
+      "fr",
+      "dua"
+    ],
+    "accessibility": "restricted",
     "license": null,
-    "notes": "Resource 2 shared by Achille Mbozeko by email on 2026-11-12. Glosbe is a community-contributed multilingual dictionary platform; entries can be user-submitted and must be treated as unverified. The host could not be reached from the build environment. Glosbe's terms of service restrict automated extraction; manual lookup or an official API agreement is recommended before ingestion.",
+    "notes": "NOT EXTRACTED (by design). Glosbe's terms prohibit scraping; partner API only. Use for manual verification by linguists. Not fetched by the project.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
   },
   {
     "id": "mboasawa-dictionnaire-duala",
     "name": "Mboa Sawa – Dictionnaire duala",
-    "url": "https://mboasawa.com/fr/mboasawa-2/dictionnaire-duala/?lettre=M",
+    "url": "https://mboasawa.com/fr/mboasawa-2/dictionnaire-duala/",
     "type": "online_dictionary",
     "reliability": "unknown",
-    "languages": ["dua", "fr"],
-    "accessibility": "blocked_in_build_environment",
-    "license": null,
-    "notes": "Resource 3 shared by Achille Mbozeko by email on 2026-11-12. The URL pattern (?lettre=M) suggests an alphabetical Duala–French dictionary browsable letter by letter. Not reachable from the build environment; structure and licence unverified.",
+    "languages": [
+      "dua",
+      "fr"
+    ],
+    "accessibility": "public",
+    "license": "No licence stated. Footer: \"© 2026 byCamerfeeling / Mboasawa\" and \"All content cited is derived from their respective sources\". No terms-of-use page found (checked 2026-11-13). Treat as copyrighted: entries are kept as pending research data with a link to each page; ask the owners for permission before any redistribution beyond this project.",
+    "notes": "Inspected 2026-11-13. robots.txt (User-agent: *) only disallows /application/, /development/, /externals/, /temporary/: the dictionary is allowed. Letter pages ?lettre=A..Z list 100 Duala headwords per page (div.word-item > div.word-dua > a) with pagination ?mboa_page=N; the French column (div.word-fr) is empty on list pages, so each word page is opened (article.mboa-u-dict-sheet: .mboa-u-sheet-word = Duala, .mboa-u-sheet-translation strong = French). Duala→French: pairs are inverted on import. Editorial process unknown (community/cultural site; word pages say historical content was migrated and examples are \"à vérifier\"). Reliability left at unknown until checked against Helmlinger (1972). Extractor: packages/linguistic-knowledge/src/ingestion/sites/mboasawa.ts; command: pnpm ingest:site --site mboasawa.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
   },
@@ -44,10 +53,14 @@
     "url": "https://kemelang.com/duala/",
     "type": "educational",
     "reliability": "unknown",
-    "languages": ["dua", "fr", "en"],
-    "accessibility": "blocked_in_build_environment",
-    "license": null,
-    "notes": "Resource 4 shared by Achille Mbozeko by email on 2026-11-12. Appears to be a language-learning / dictionary platform for Cameroonian languages. Not reachable from the build environment; type, structure and licence unverified.",
+    "languages": [
+      "dua",
+      "fr",
+      "en"
+    ],
+    "accessibility": "restricted",
+    "license": "Not open. robots.txt states: \"Automated scraping of Kemelang data is strictly restricted. If you wish to access our dictionary datasets, audio corpora, or APIs for commercial or research purposes, please contact us\" (contact@kemelang.com).",
+    "notes": "NOT EXTRACTED. Inspected 2026-11-13: robots.txt blocks AI agents by name (including claude, anthropic, ClaudeBot, Claude-User) with Disallow: / and restricts automated scraping for everyone; a dataset page exists (/dictionary/datasets/download) but access must be requested from the owners. Dictionary pages /dictionnaires/duala/<mot>/ list a Duala headword with several French glosses. Only robots.txt and the /duala/ landing page were fetched for this assessment.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
   },
@@ -57,7 +70,10 @@
     "url": null,
     "type": "bilingual_dictionary",
     "reliability": "academic",
-    "languages": ["dua", "fr"],
+    "languages": [
+      "dua",
+      "fr"
+    ],
     "accessibility": "offline",
     "license": "Copyrighted print work. Only short verified entries may be transcribed with citation; no bulk reproduction.",
     "notes": "Standard academic Duala–French dictionary (664 pages) cited by Omniglot, Lexilogos and the Basel Mission Archives. Recommended as the primary reference for linguist verification of entries. Not available in digital form in this project.",
@@ -70,7 +86,12 @@
     "url": null,
     "type": "bilingual_dictionary",
     "reliability": "academic",
-    "languages": ["dua", "de", "fr", "en"],
+    "languages": [
+      "dua",
+      "de",
+      "fr",
+      "en"
+    ],
     "accessibility": "offline",
     "license": "Copyrighted print work. Citation-only use.",
     "notes": "Four-language academic dictionary (675 pages). Reviewers note some missing or erroneous tone marks. Useful secondary reference for linguists.",
@@ -83,7 +104,10 @@
     "url": null,
     "type": "grammar",
     "reliability": "academic",
-    "languages": ["dua", "fr"],
+    "languages": [
+      "dua",
+      "fr"
+    ],
     "accessibility": "offline",
     "license": "Copyrighted print work. Grammar rules may be summarised in the project's own words with citation.",
     "notes": "Reference grammar listed by Glottolog (reference id 80392). Grammar rules entered manually from this work should be recorded with page references in the `reference` field.",
@@ -92,14 +116,18 @@
   },
   {
     "id": "wiktionary-dua",
-    "name": "Wiktionary – Duala lemmas (en.wiktionary.org / fr.wiktionary.org)",
-    "url": "https://en.wiktionary.org/wiki/Category:Duala_lemmas",
+    "name": "Wiktionary – Duala entries (fr.wiktionary.org Catégorie:douala, en.wiktionary.org Category:Duala lemmas)",
+    "url": "https://fr.wiktionary.org/wiki/Cat%C3%A9gorie:douala",
     "type": "community",
     "reliability": "community",
-    "languages": ["dua", "en", "fr"],
-    "accessibility": "blocked_in_build_environment",
-    "license": "CC BY-SA 4.0 (attribution and share-alike required)",
-    "notes": "Open-licensed community dictionary with a Duala category. Suitable for ingestion as unverified entries with attribution. Not reachable from the build environment; ingest via the MediaWiki API when available.",
+    "languages": [
+      "dua",
+      "en",
+      "fr"
+    ],
+    "accessibility": "public",
+    "license": "CC BY-SA 4.0 (attribution and share-alike required). Attribution: Wiktionary / Wiktionnaire contributors; each entry links to its page and records the revision id in its note. Entries from this source in data/knowledge/douala.json are distributed under CC BY-SA 4.0.",
+    "notes": "Read 2026-11-13 through the MediaWiki Action API (wikitext), never HTML. Categories: fr \"Catégorie:douala\" (412 pages, section == {{langue|dua}} ==, French definitions) and en \"Category:Duala lemmas\" (46 pages, section ==Duala==, English definitions). robots.txt disallows /w/ for generic crawlers; the API was used under the MediaWiki API etiquette (serial requests, descriptive User-Agent with a contact URL, maxlag=5, ≥ 3.5 s between requests), which explicitly allows programmatic clients. Community-edited: some pages use the older Meinhof orthography (e.g. be̱) next to AGLC spellings; both are kept as written. Extractor: packages/linguistic-knowledge/src/ingestion/sites/wiktionary.ts; command: pnpm ingest:site --site wiktionary-fr|wiktionary-en.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
   },
@@ -109,7 +137,11 @@
     "url": null,
     "type": "manual_entry",
     "reliability": "established",
-    "languages": ["dua", "fr", "en"],
+    "languages": [
+      "dua",
+      "fr",
+      "en"
+    ],
     "accessibility": "public",
     "license": "Project licence (MIT) for entries authored by the project team.",
     "notes": "Use this source for vocabulary, expressions and grammar rules typed by native speakers and linguists through the admin interface or the ingest CLI. Entries still start as `pending` and must be approved.",

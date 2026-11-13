@@ -10,7 +10,9 @@ coverage/
 apps/extension/release/
 .vite/
 .pnpm-store/
-apps/backend/data/local-knowledge.json
 !.env.production.example
 # Extension build config (copy from apps/extension/.env.production.example)
 apps/extension/.env.production
+# data/knowledge/douala.json (the knowledge base) is versioned on purpose: do not ignore it.
+# Legacy local knowledge file (before data/knowledge/douala.json); not used anymore.
+apps/backend/data/

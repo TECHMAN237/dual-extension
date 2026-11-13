@@ -1,13 +1,14 @@
 # Render Blueprint for the DOUALA AI backend.
 # Deploy: render.com → New → Blueprint → select this repository.
-# Render asks for the values marked `sync: false` (AI_API_KEY, SUPABASE_URL,
-# SUPABASE_SERVICE_ROLE_KEY) when the Blueprint is created. See docs/DEPLOYMENT.md.
+# Render asks for the value marked `sync: false` (AI_API_KEY) when the Blueprint is
+# created. See docs/DEPLOYMENT.md.
 services:
   - type: web
     name: douala-ai-backend
     runtime: node
     # Free plan: the service sleeps after 15 min without traffic (wake-up ≈ 30–60 s)
-    # and its disk is wiped on every restart, so data lives in Supabase.
+    # and its disk is wiped on every restart, so the knowledge base is read from the
+    # versioned file data/knowledge/douala.json (see ALLOW_EPHEMERAL_STORAGE below).
     plan: free
     rootDir: .
     # pnpm is installed with npm, not Corepack: Corepack in older Node 22 releases rejects
@@ -39,11 +40,13 @@ services:
         value: google/gemma-4-26b-a4b-it:free
       - key: AI_BASE_URL
         value: https://openrouter.ai/api/v1
-      # --- Persistent storage (required in production) --------------------------
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
+      # --- Storage: the knowledge base ships with the code -------------------------
+      # data/knowledge/douala.json is versioned in Git and loaded at startup. Writes made on
+      # the server (admin approvals, corrections) stay in memory and are lost on restart:
+      # the free disk is wiped, and that is intended. To keep a change, make it in the
+      # repository (pnpm ingest / edit the file), commit and push. No Supabase.
+      - key: ALLOW_EPHEMERAL_STORAGE
+        value: "true"
       # --- Security ---------------------------------------------------------------
       - key: ADMIN_API_TOKEN
         generateValue: true

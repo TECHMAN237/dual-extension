@@ -101,12 +101,16 @@ describe("loadConfig", () => {
     expect(yaml).toContain("startCommand: cd apps/backend && node dist/index.js");
     expect(yaml).not.toMatch(/^\s*buildCommand:.*corepack/m);
     expect(env.EXTENSION_ACCESS_TOKEN).toBeUndefined();
-    const c = loadConfig({ ...env, AI_API_KEY: "sk-or-x", SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service", ADMIN_API_TOKEN: "generated" });
+    // No Supabase: the knowledge base ships with the code.
+    expect(yaml).not.toMatch(/SUPABASE_(URL|SERVICE_ROLE_KEY)/);
+    expect(env.ALLOW_EPHEMERAL_STORAGE).toBe("true");
+    const c = loadConfig({ ...env, AI_API_KEY: "sk-or-x", ADMIN_API_TOKEN: "generated" });
     expect(c.engine.model).toBe("google/gemma-4-31b-it:free");
     expect(c.engine.fallbackModel).toBe("google/gemma-4-26b-a4b-it:free");
     expect(c.engine.baseUrl).toBe("https://openrouter.ai/api/v1");
     expect(c.corsOrigins).toEqual(["chrome-extension://egmamnfapihdpbmnamooaabbafmncpbh"]);
-    expect(c.storage).toBe("supabase");
+    expect(c.storage).toBe("memory");
+    expect(c.knowledgeFile.replace(/\\/g, "/")).toMatch(/\/data\/knowledge\/douala\.json$/);
   });
   it("never includes secrets in the config description", () => {
     const c = loadConfig(testEnv({ AI_PROVIDER: "openai", AI_API_KEY: "sk-secret-value", ADMIN_API_TOKEN: "admin-secret" }));

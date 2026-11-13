@@ -1,4 +1,3 @@
-import path from "node:path";
 import { InMemoryKnowledgeStore, SupabaseKnowledgeStore, loadSeedSources, loadSeedUiTerms, type KnowledgeStore } from "@douala-ai/linguistic-knowledge";
 import { TranslationEngine, createProvider, type EngineLogger, type LlmProvider } from "@douala-ai/translation-engine";
 import type { AppConfig } from "./config";
@@ -38,8 +37,12 @@ export async function createContainer(config: AppConfig, overrides: ContainerOve
       repos ??= createSupabaseRepositories(url, key);
     } else {
       if (!store) {
+        // The versioned file (data/knowledge/douala.json) is the source of truth and is always
+        // loaded. Writes go back to it, except in tests. On Render the disk is wiped on restart,
+        // so live writes are temporary there by design: commit the file to keep data.
         const memory = new InMemoryKnowledgeStore({
-          persistPath: config.env.NODE_ENV === "test" ? undefined : path.resolve(process.cwd(), config.env.LOCAL_KNOWLEDGE_FILE),
+          persistPath: config.knowledgeFile,
+          readOnly: config.env.NODE_ENV === "test",
           seedSources: loadSeedSources(),
         });
         await memory.load();

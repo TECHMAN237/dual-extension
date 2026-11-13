@@ -4,9 +4,10 @@ export * from "./json";
 export * from "./html";
 export * from "./pdf";
 export * from "./fetch";
+export * from "./sites";
 
 import type { LinguisticSource, SourceLanguageCode, TargetLanguageCode } from "@douala-ai/shared";
-import type { KnowledgeStore } from "../store";
+import type { KnowledgeEntryInput, KnowledgeStore } from "../store";
 import { extractFromCsv } from "./csv";
 import { politeFetch } from "./fetch";
 import { extractFromHtml, type HtmlExtractorOptions } from "./html";
@@ -34,6 +35,21 @@ function inferFormat(contentType: string | null, ref: string): IngestDocumentOpt
   if (ct.includes("json") || ref.toLowerCase().endsWith(".json")) return "json";
   if (ct.includes("html") || ref.toLowerCase().endsWith(".html") || ref.toLowerCase().endsWith(".htm")) return "html";
   return "text";
+}
+
+/**
+ * Upsert extracted entries without undoing human review: when an entry with the same
+ * (deterministic) id already exists, its validation status, note and extraction date are kept.
+ */
+export async function writeEntriesKeepingReview(store: KnowledgeStore, entries: KnowledgeEntryInput[]): Promise<void> {
+  const ids = entries.map((e) => e.id).filter((id): id is string => Boolean(id));
+  const existing = new Map((await store.getEntries(ids)).map((e) => [e.id, e]));
+  await store.upsertEntries(
+    entries.map((e) => {
+      const prev = e.id ? existing.get(e.id) : undefined;
+      return prev ? { ...e, validationStatus: prev.validationStatus, note: prev.note ?? e.note, extractedAt: prev.extractedAt } : e;
+    }),
+  );
 }
 
 /** Ingest a document already in memory (buffer) with a known reference (URL or filename). */
@@ -65,7 +81,7 @@ export async function ingestBuffer(buffer: Buffer, reference: string, contentTyp
     documentReference: reference,
   });
   if (!opts.dryRun && report.entries.length > 0) {
-    await opts.store.upsertEntries(report.entries);
+    await writeEntriesKeepingReview(opts.store, report.entries);
     await opts.store.upsertSource({
       ...opts.source,
       ingestionStatus: "ingested",

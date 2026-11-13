@@ -1,5 +1,20 @@
+import { createHash } from "node:crypto";
 import type { KnowledgeCategory, LinguisticSource, SourceLanguageCode, TargetLanguageCode } from "@douala-ai/shared";
 import type { KnowledgeEntryInput } from "../store";
+
+/**
+ * Deterministic UUID (RFC 4122 layout, version 5 bits) for an extracted entry, so that
+ * re-ingesting a page updates the same entries instead of adding duplicates, the versioned
+ * knowledge file keeps stable ids, and ids stay valid for the Supabase `uuid` column.
+ */
+export function stableEntryId(parts: { sourceId: string; sourceLanguage: string; targetLanguage: string; category: string; sourceText: string; targetText: string | null }): string {
+  const key = [parts.sourceId, parts.sourceLanguage, parts.targetLanguage, parts.category, parts.sourceText.normalize("NFC").toLowerCase(), (parts.targetText ?? "").normalize("NFC")].join("\u001f");
+  const h = createHash("sha1").update(key, "utf8").digest();
+  h[6] = (h[6]! & 0x0f) | 0x50;
+  h[8] = (h[8]! & 0x3f) | 0x80;
+  const hex = h.subarray(0, 16).toString("hex");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
 
 export interface ExtractedPair {
   sourceText: string;
@@ -52,12 +67,14 @@ export function toEntryInputs(pairs: ExtractedPair[], ctx: IngestionContext): In
       continue;
     }
     seen.add(key);
+    const category = p.category ?? "vocabulary";
     entries.push({
+      id: stableEntryId({ sourceId: ctx.source.id, sourceLanguage: ctx.sourceLanguage, targetLanguage: ctx.targetLanguage, category, sourceText, targetText }),
       sourceLanguage: ctx.sourceLanguage,
       targetLanguage: ctx.targetLanguage,
       sourceText,
       targetText,
-      category: p.category ?? "vocabulary",
+      category,
       context: p.context ?? null,
       example: p.example ?? null,
       note: p.note ?? null,

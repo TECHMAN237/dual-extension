@@ -1,15 +1,15 @@
 # Database
 
-DOUALA AI runs in two storage modes, selected automatically from the environment:
+DOUALA AI normally stores its knowledge base **in Git**: no database is used.
 
 | Mode | When | Where data lives |
 | --- | --- | --- |
-| **memory** (default) | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` empty | In-process maps; the knowledge base is persisted to `apps/backend/data/local-knowledge.json` (git-ignored). Corrections, history and usage are lost on restart. |
-| **supabase** | both variables set | Supabase PostgreSQL via `@supabase/supabase-js` with the service-role key (backend only). |
+| **memory + versioned file** (normal) | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` not set | The knowledge base is `data/knowledge/douala.json` at the repository root, committed to Git and loaded at startup (locally and on Render). Local changes are written back to the file (commit them); on Render they last until the next restart, because the free disk is wiped (`ALLOW_EPHEMERAL_STORAGE=true`). Corrections, history and usage are in memory only. See `data/knowledge/README.md`. |
+| **supabase** (optional future option, not used) | both variables set | Supabase PostgreSQL via `@supabase/supabase-js` with the service-role key (backend only). Kept so the project can switch later if shared persistent writes are needed. |
 
-The same repository interfaces (`apps/backend/src/repositories/types.ts`, `packages/linguistic-knowledge/src/store.ts`) back both modes, so the API behaves identically.
+The same repository interfaces (`apps/backend/src/repositories/types.ts`, `packages/linguistic-knowledge/src/store.ts`) back both modes, so the API behaves identically. The schema below documents the Supabase option and the shape of the data.
 
-## Setup (Supabase)
+## Setup (Supabase, optional, not used by default)
 
 1. Create a project at https://supabase.com.
 2. SQL editor → run `supabase/migrations/0001_initial.sql`. Optionally run `0002_embeddings.sql` (pgvector) if you plan to add semantic retrieval.

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { DEFAULT_MODELS, PROVIDER_NAMES, engineConfigSchema, type EngineConfig } from "@douala-ai/translation-engine";
+import { resolveKnowledgeFile } from "./paths";
 
 const bool = z
   .union([z.boolean(), z.string()])
@@ -40,7 +41,8 @@ const envSchema = z.object({
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
   MAX_BODY_BYTES: z.coerce.number().int().positive().default(256 * 1024),
 
-  LOCAL_KNOWLEDGE_FILE: z.string().default("./data/local-knowledge.json"),
+  /** Knowledge base file. Default data/knowledge/douala.json; relative paths start at the repository root. */
+  LOCAL_KNOWLEDGE_FILE: z.string().optional(),
   SEED_UI_TERMS: bool.default(true),
 });
 
@@ -60,6 +62,8 @@ export interface AppConfig {
   env: Env;
   engine: EngineConfig;
   storage: "memory" | "supabase";
+  /** Absolute path of the versioned knowledge file (memory storage). */
+  knowledgeFile: string;
   corsOrigins: string[];
   version: string;
 }
@@ -131,6 +135,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     env,
     engine,
     storage: supabaseVars === 2 ? "supabase" : "memory",
+    knowledgeFile: resolveKnowledgeFile(env.LOCAL_KNOWLEDGE_FILE),
     corsOrigins: env.CORS_ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
     version: "0.1.0",
   };
@@ -147,6 +152,7 @@ export function describeConfig(config: AppConfig): Record<string, unknown> {
     fallbackModel: config.engine.fallbackModel ?? null,
     baseUrl: config.engine.baseUrl ?? null,
     storage: config.storage,
+    knowledgeFile: config.storage === "memory" ? config.knowledgeFile : null,
     corsOrigins: config.corsOrigins,
     apiKeyConfigured: Boolean(config.engine.apiKey),
     adminTokenConfigured: Boolean(config.env.ADMIN_API_TOKEN),

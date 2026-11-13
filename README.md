@@ -8,14 +8,14 @@ The long-term vision is to make the internet accessible in African languages; ve
 
 ## Principles
 
-- **No invented Douala.** The knowledge base ships with sources and term lists but *zero* fabricated translations. With an empty knowledge base the model is instructed to decline rather than guess; declined segments keep their original text and are flagged for review.
+- **No invented Douala.** The knowledge base (`data/knowledge/douala.json`, versioned in Git) contains only entries imported from real dictionary pages (Wiktionary, Mboa Sawa), each with the exact URL of its page, and *zero* fabricated translations. All of them are *pending* until a Duala speaker reviews them. Where no evidence exists the model is instructed to decline rather than guess; declined segments keep their original text and are flagged for review.
 - **Evidence, not fake confidence.** Results are labelled *High / Moderate / Low / Unverified evidence*, derived from the references actually used.
 - **Secrets stay on the server.** The extension never holds an AI key. The backend validates its configuration on startup, rate-limits, validates every input and output, and talks to Anthropic/OpenAI through swappable adapters.
 - **Humans in the loop.** Extracted entries and user corrections are *pending* until a linguist approves them in the admin page.
 
 ## Using it (online server)
 
-The backend runs on Render with its data in Supabase (`render.yaml`, `docs/DEPLOYMENT.md`); the extension uses it by default, so no local server is needed:
+The backend runs on Render (`render.yaml`, `docs/DEPLOYMENT.md`) and loads the knowledge base from the versioned file `data/knowledge/douala.json` (no database). The extension uses that server by default, so no local server is needed:
 
 ```bash
 pnpm install
@@ -51,7 +51,8 @@ douala-ai/
 │   ├── shared/             Language registry, Zod API contracts, text utils, EN/FR detection
 │   ├── linguistic-knowledge/  Knowledge stores (memory/Supabase), retrieval, ingestion, seed registry
 │   └── translation-engine/ Provider adapters (Anthropic/OpenAI/mock), RAG prompt, router, orchestrator
-├── supabase/migrations/    PostgreSQL schema + RLS (+ optional pgvector)
+├── data/knowledge/         douala.json: the knowledge base, versioned in Git (+ README: licences)
+├── supabase/migrations/    Optional future storage (not used): PostgreSQL schema + RLS
 ├── docs/                   Architecture, research, configuration, API, security, testing, deployment
 ├── scripts/                verify.sh (full check), dev.sh
 ├── render.yaml             Render blueprint for the backend
@@ -70,7 +71,8 @@ douala-ai/
 | `docs/API.md` | REST endpoints and payloads |
 | `docs/SECURITY.md` | Trust boundaries and controls |
 | `docs/TESTING.md` | What is tested and how to run it |
-| `docs/DEPLOYMENT.md` | Production (Render + Supabase, extension default URL) and development modes |
+| `docs/DEPLOYMENT.md` | Production (Render, knowledge base in Git, extension default URL) and development modes |
+| `data/knowledge/README.md` | The versioned knowledge base: format, licences, attribution |
 
 ## Commands
 
@@ -81,6 +83,7 @@ douala-ai/
 | `pnpm typecheck` · `pnpm test` · `pnpm build` | Workspace-wide checks |
 | `pnpm ai:test-connection` | Verify the configured AI provider |
 | `pnpm ingest --source <id> --url <url> --lang fr` | Ingest a linguistic resource (see `docs/LINGUISTIC_RESEARCH.md`) |
+| `pnpm ingest:site --site mboasawa\|wiktionary-fr\|wiktionary-en [--dry-run]` | Crawl a dictionary with its dedicated, rate-limited extractor into `data/knowledge/douala.json` |
 | `pnpm --filter @douala-ai/backend seed` | Seed the source registry into the configured store |
 | `pnpm e2e:live` | Live end-to-end check (built content script + backend, needs Playwright Chromium) |
 | `pnpm e2e:extension` | Loads the real unpacked extension in Chromium and runs Scan, Translate, Restore |
