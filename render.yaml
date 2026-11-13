@@ -10,13 +10,16 @@ services:
     # and its disk is wiped on every restart, so data lives in Supabase.
     plan: free
     rootDir: .
-    buildCommand: corepack enable && corepack prepare pnpm@10.28.0 --activate && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build
-    startCommand: pnpm --filter @douala-ai/backend start
+    # pnpm is installed with npm, not Corepack: Corepack in older Node 22 releases rejects
+    # the npm registry's current signing keys and the build fails before installing anything.
+    buildCommand: npm install -g pnpm@10.28.0 && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build
+    # Plain node (no --env-file): Render injects the environment variables itself.
+    startCommand: cd apps/backend && node dist/index.js
     healthCheckPath: /api/health
     envVars:
-      # `node --env-file-if-exists` (start script) needs Node 22.9+.
+      # Latest Node 22.x on Render.
       - key: NODE_VERSION
-        value: 22.12.0
+        value: "22"
       - key: NODE_ENV
         value: production
       - key: PORT

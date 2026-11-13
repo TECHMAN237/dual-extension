@@ -96,7 +96,10 @@ describe("loadConfig", () => {
     const yaml = readFileSync(fileURLToPath(new URL("../../../render.yaml", import.meta.url)), "utf8");
     const env: Record<string, string> = {};
     for (const m of yaml.matchAll(/- key: (\w+)\n\s+value: "?([^"\n]+)"?/g)) env[m[1]!] = m[2]!;
-    expect(env).toMatchObject({ NODE_ENV: "production", AI_PROVIDER: "openrouter", NODE_VERSION: "22.12.0" });
+    expect(env).toMatchObject({ NODE_ENV: "production", AI_PROVIDER: "openrouter", NODE_VERSION: "22" });
+    expect(yaml).toContain("buildCommand: npm install -g pnpm@10.28.0 && pnpm install --frozen-lockfile && pnpm --filter @douala-ai/backend... build");
+    expect(yaml).toContain("startCommand: cd apps/backend && node dist/index.js");
+    expect(yaml).not.toMatch(/^\s*buildCommand:.*corepack/m);
     expect(env.EXTENSION_ACCESS_TOKEN).toBeUndefined();
     const c = loadConfig({ ...env, AI_API_KEY: "sk-or-x", SUPABASE_URL: "https://x.supabase.co", SUPABASE_SERVICE_ROLE_KEY: "service", ADMIN_API_TOKEN: "generated" });
     expect(c.engine.model).toBe("google/gemma-4-31b-it:free");
