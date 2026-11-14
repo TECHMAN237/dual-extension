@@ -2,8 +2,10 @@
  * Crawl a dictionary site with its dedicated extractor and write the entries into the
  * knowledge base (data/knowledge/douala.json by default). Everything stays `pending`.
  *
- *   pnpm ingest:site --site mboasawa [--letters A-Z | A,B,C] [--max-words N] [--dry-run] [--examples 10]
+ *   pnpm ingest:site --site mboasawa-api [--max-pages N] [--start-page N] [--dry-run]     (whole dictionary via the WordPress REST API)
+ *   pnpm ingest:site --site mboasawa [--letters A-Z | A,B,C] [--max-words N] [--dry-run] [--examples 10]   (letter pages: incomplete, see docs)
  *   pnpm ingest:site --site wiktionary-fr | wiktionary-en [--max-pages N] [--dry-run]
+ *   pnpm ingest:site --site wiktionary-fr-translations | wiktionary-en-translations   (translation tables → Duala)
  *
  * Politeness: one request at a time, ≥ 3.5 s between requests to a host, robots.txt honoured
  * (except the MediaWiki API, whose etiquette explicitly allows programmatic clients), and the
@@ -19,12 +21,16 @@ import {
   SiteBlockedError,
   WIKTIONARY_SOURCE_ID,
   crawlMboasawa,
+  crawlMboasawaRest,
+  crawlWikipediaFr,
+  WIKIPEDIA_SOURCE_ID,
   crawlWiktionary,
   loadSeedSources,
   toEntryInputs,
   writeEntriesKeepingReview,
   type CrawlBatch,
   type ExtractedPair,
+  type KnowledgeEntryInput,
 } from "@douala-ai/linguistic-knowledge";
 import type { LinguisticSource, SourceLanguageCode } from "@douala-ai/shared";
 import { createContainer } from "../container";
@@ -56,12 +62,15 @@ async function main() {
     console.log(stamped);
     if (logFile) appendFileSync(logFile, `${stamped}\n`);
   };
-  if (site !== "mboasawa" && site !== "wiktionary-fr" && site !== "wiktionary-en") {
-    console.error("Usage: pnpm ingest:site --site mboasawa|wiktionary-fr|wiktionary-en [--letters A-Z] [--max-words N] [--max-pages N] [--dry-run] [--log file]");
+  const SITES = ["mboasawa-api", "mboasawa", "wiktionary-fr", "wiktionary-en", "wiktionary-fr-translations", "wiktionary-en-translations", "wikipedia-fr"] as const;
+  if (!site || !(SITES as readonly string[]).includes(site)) {
+    console.error(`Usage: pnpm ingest:site --site ${SITES.join("|")} [--max-pages N] [--letters A-Z --max-words N (mboasawa letter pages)] [--dry-run] [--log file]`);
     process.exit(1);
   }
-  const sourceId = site === "mboasawa" ? MBOASAWA_SOURCE_ID : WIKTIONARY_SOURCE_ID;
-  const sourceLanguage: SourceLanguageCode = site === "wiktionary-en" ? "en" : "fr";
+  const isMboasawa = site.startsWith("mboasawa");
+  const sourceId = isMboasawa ? MBOASAWA_SOURCE_ID : site === "wikipedia-fr" ? WIKIPEDIA_SOURCE_ID : WIKTIONARY_SOURCE_ID;
+  const sourceLanguage: SourceLanguageCode = site.startsWith("wiktionary-en") ? "en" : "fr";
+  const maxPages = arg("max-pages") ? Number(arg("max-pages")) : undefined;
 
   const config = loadConfig();
   const c = await createContainer(config);
@@ -71,20 +80,28 @@ async function main() {
   let source: LinguisticSource = { ...seed, ingestionStatus: stored?.ingestionStatus ?? seed.ingestionStatus, lastIngestedAt: stored?.lastIngestedAt ?? seed.lastIngestedAt };
   log(`${dryRun ? "DRY RUN (nothing written)" : `Writing to ${config.storage === "memory" ? config.knowledgeFile : "Supabase"}`}; source ${sourceId}`);
 
-  const session = new PoliteSession({ respectRobots: site === "mboasawa", log: (l) => log(`  ${l}`) });
+  // Mboa Sawa: robots.txt honoured, 5 s between requests (the server is unstable).
+  // Wiktionary: MediaWiki Action API under the API etiquette (see docs/LINGUISTIC_RESEARCH.md).
+  const session = new PoliteSession({ respectRobots: isMboasawa, minIntervalMs: isMboasawa ? 5_000 : undefined, log: (l) => log(`  ${l}`) });
+  const wiki = site.startsWith("wiktionary-fr") ? "fr" : "en";
   const batches: AsyncGenerator<CrawlBatch> =
-    site === "mboasawa"
-      ? crawlMboasawa({ session, letters: parseLetters(arg("letters")), maxWords: arg("max-words") ? Number(arg("max-words")) : undefined, log })
-      : crawlWiktionary({ session, wiki: site === "wiktionary-fr" ? "fr" : "en", maxPages: arg("max-pages") ? Number(arg("max-pages")) : undefined, log });
+    site === "mboasawa-api"
+      ? crawlMboasawaRest({ session, maxPages, startPage: arg("start-page") ? Number(arg("start-page")) : undefined, log })
+      : site === "wikipedia-fr"
+        ? crawlWikipediaFr({ session, log })
+      : site === "mboasawa"
+        ? crawlMboasawa({ session, letters: parseLetters(arg("letters")), maxWords: arg("max-words") ? Number(arg("max-words")) : undefined, log })
+        : crawlWiktionary({ session, wiki, kind: site.endsWith("-translations") ? "translations" : "lemmas", maxPages, log });
 
   let pending: ExtractedPair[] = [];
   let documents = 0;
   let written = 0;
   let empty = 0;
-  const examples: ExtractedPair[] = [];
+  const examples: KnowledgeEntryInput[] = [];
   const flush = async () => {
     if (pending.length === 0) return;
     const report = toEntryInputs(pending, { source, sourceLanguage, targetLanguage: "dua" });
+    for (const e of report.entries) if (examples.length < showExamples) examples.push(e);
     if (!dryRun) await writeEntriesKeepingReview(c.store, report.entries);
     written += report.entries.length;
     pending = [];
@@ -99,7 +116,6 @@ async function main() {
         empty++;
         log(`  ${batch.label}: no translation on the page, skipped`);
       }
-      for (const p of batch.pairs) if (examples.length < showExamples) examples.push(p);
       pending.push(...batch.pairs);
       if (documents % 25 === 0) {
         await flush();

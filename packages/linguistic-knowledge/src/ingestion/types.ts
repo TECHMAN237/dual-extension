@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { KnowledgeCategory, LinguisticSource, SourceLanguageCode, TargetLanguageCode } from "@douala-ai/shared";
 import type { KnowledgeEntryInput } from "../store";
+import { classifyGloss } from "./classify";
 
 /**
  * Deterministic UUID (RFC 4122 layout, version 5 bits) for an extracted entry, so that
@@ -67,7 +68,18 @@ export function toEntryInputs(pairs: ExtractedPair[], ctx: IngestionContext): In
       continue;
     }
     seen.add(key);
-    const category = p.category ?? "vocabulary";
+    let category = p.category ?? "vocabulary";
+    let note = p.note ?? null;
+    // Audit (automated sources only): descriptions become definitions, sentence pairs become examples.
+    if (ctx.source.type !== "manual_entry" && (category === "vocabulary" || category === "expression")) {
+      const kind = classifyGloss(sourceText, targetText);
+      if (kind === "definition") {
+        category = "contextual_meaning";
+        note = [`Définition, pas un équivalent de traduction : « ${sourceText} »`, note].filter(Boolean).join(" — ");
+      } else if (kind === "sentence") {
+        category = "sentence_example";
+      }
+    }
     entries.push({
       id: stableEntryId({ sourceId: ctx.source.id, sourceLanguage: ctx.sourceLanguage, targetLanguage: ctx.targetLanguage, category, sourceText, targetText }),
       sourceLanguage: ctx.sourceLanguage,
@@ -77,7 +89,7 @@ export function toEntryInputs(pairs: ExtractedPair[], ctx: IngestionContext): In
       category,
       context: p.context ?? null,
       example: p.example ?? null,
-      note: p.note ?? null,
+      note,
       sourceId: ctx.source.id,
       sourceName: ctx.source.name,
       sourceUrl: ctx.source.url,

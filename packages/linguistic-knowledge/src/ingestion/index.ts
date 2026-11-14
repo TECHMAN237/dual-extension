@@ -1,4 +1,6 @@
 export * from "./types";
+export * from "./classify";
+export * from "./grammar";
 export * from "./csv";
 export * from "./json";
 export * from "./html";
@@ -27,7 +29,7 @@ export interface IngestDocumentOptions {
   /** When true, entries are returned but not written to the store. */
   dryRun?: boolean;
   /**
-   * Import as `verified` (a glossary filled in by a Duala speaker). Only allowed for the source
+   * Import as `verified` (a list checked by a Duala speaker). Only allowed for the source
    * `manual-linguist-entries`; rows without a translation are skipped.
    */
   verified?: boolean;
@@ -47,7 +49,7 @@ function inferFormat(contentType: string | null, ref: string): IngestDocumentOpt
 /**
  * Upsert extracted entries without undoing human review: when an entry with the same
  * (deterministic) id already exists, its validation status, note and extraction date are kept.
- * Exception: an entry imported as `verified` (a speaker's glossary, see VERIFIED_IMPORT_SOURCE_ID)
+ * Exception: an entry imported as `verified` (a list checked by a speaker, see VERIFIED_IMPORT_SOURCE_ID)
  * is itself a human review, so it upgrades a pending entry.
  */
 export async function writeEntriesKeepingReview(store: KnowledgeStore, entries: KnowledgeEntryInput[]): Promise<void> {
@@ -67,7 +69,7 @@ export async function writeEntriesKeepingReview(store: KnowledgeStore, entries: 
 export const VERIFIED_IMPORT_SOURCE_ID = "manual-linguist-entries";
 
 /**
- * Mark entries from a speaker-reviewed glossary as verified. Rows without a Duala translation
+ * Mark entries from a list checked by a Duala speaker as verified. Rows without a Duala translation
  * are dropped (a verified entry must have a target). Throws for any other source.
  */
 export function asVerifiedImport(source: LinguisticSource, entries: KnowledgeEntryInput[], reviewer?: string): KnowledgeEntryInput[] {
@@ -81,7 +83,7 @@ export function asVerifiedImport(source: LinguisticSource, entries: KnowledgeEnt
       ...e,
       origin: "verified_source" as const,
       validationStatus: "verified" as const,
-      note: [e.note, `Verified by a Duala speaker${reviewer ? ` (${reviewer})` : ""}, glossary import ${date}.`].filter(Boolean).join(" — "),
+      note: [e.note, `Verified by a Duala speaker${reviewer ? ` (${reviewer})` : ""}, import ${date}.`].filter(Boolean).join(" — "),
       tags: [...new Set([...(e.tags ?? []), "speaker-verified"])],
     }));
 }

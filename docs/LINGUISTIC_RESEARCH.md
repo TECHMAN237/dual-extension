@@ -84,97 +84,138 @@ A native-speaker reviewer ("le locuteur", as the email stresses) remains the fin
 The knowledge base is the versioned file `data/knowledge/douala.json` (see `data/knowledge/README.md`). Imports write to it; review the diff and commit it.
 
 ```bash
-# Dedicated, rate-limited extractors (preferred for the sites below):
-pnpm ingest:site --site mboasawa --letters A --max-words 10 --dry-run   # 10 examples, nothing written
-pnpm ingest:site --site mboasawa --letters A-Z --log ingest.log         # full import (several hours)
-pnpm ingest:site --site wiktionary-fr                                   # fr.wiktionary.org, Catégorie:douala
-pnpm ingest:site --site wiktionary-en                                   # en.wiktionary.org, Category:Duala lemmas
-# Generic extractor for a single page or file (tables, definition lists, "word — meaning" lines, CSV, JSON, PDF):
-pnpm ingest --source <id> --url <url> --lang fr --dry-run
+pnpm ingest:site --site mboasawa-api --max-pages 1 --dry-run     # 100 words, nothing written
+pnpm ingest:site --site mboasawa-api                             # whole Mboa Sawa dictionary (≈ 75 API requests, 5 s apart)
+pnpm ingest:site --site wiktionary-fr | wiktionary-en            # Duala entries of fr/en Wiktionary (+ usage examples)
+pnpm ingest:site --site wiktionary-fr-translations | wiktionary-en-translations   # French/English pages listing a Duala translation
+pnpm ingest:site --site wikipedia-fr                             # tables of the article « Duala (langue) »
+pnpm ingest:grammar                                              # grammar sheet data/knowledge/grammaire-douala.md → grammar_rule entries
+pnpm ingest --source <id> --url <url> --lang fr --dry-run        # generic extractor for one page or file
 ```
 
 Rules built into the tooling (`packages/linguistic-knowledge/src/ingestion/fetch.ts`, `PoliteSession`):
 
-- **One request at a time and at least 3.5 s between two requests to the same host**, robots.txt included. The pause is measured from the end of the previous response.
-- **robots.txt is read once per site and honoured**, including `*` and `$` wildcards and multi-agent groups. The only exception is the MediaWiki Action API (§6.2).
-- **Hard stop at the first 403, 429 or CAPTCHA / bot challenge.** Nothing is retried or bypassed; what was collected so far is saved and the source is marked `partial`. A dropped connection gets one retry after 30 s, then the run stops.
-- Descriptive User-Agent with a contact URL: `DoualaAI-Ingestion/0.1 (+https://github.com/TECHMAN237/dual-extension; …)`.
-- **Direction:** `sourceText` = French (or English), `targetText` = Duala, spelled exactly as on the page. Duala→French dictionaries are inverted on import.
-- **One entry per sense:** "maison, demeure ; foyer" gives three entries with the same Duala word and the same reference. Commas split only lists of short senses or senses that each start with an article; descriptive definitions are kept whole. A trailing "(…)" becomes the note.
-- **Provenance:** every entry has `reference` = the exact URL of the page it came from, plus the source id/name. Wiktionary entries also record the revision id and the CC BY-SA 4.0 attribution in `note`.
-- **Status:** everything imported is `pending` / `extracted_unverified`. Nothing is marked `verified`; that is a speaker's job (admin page `/admin/`).
-- **Stable ids:** entry ids are UUIDs derived from (source, languages, category, French text, Duala text). Re-running an import updates the same entries, never duplicates them, and never resets a status or note set by a reviewer.
+- **One request at a time, at least 3.5 s between two requests to the same host** (5 s for Mboa Sawa), robots.txt included.
+- **robots.txt is read once per site and honoured**, including `*` and `$` wildcards and multi-agent groups. Exception: the MediaWiki Action API (§6.2), used under its etiquette.
+- **Hard stop at the first 403, 429 or CAPTCHA / bot challenge.** Nothing is bypassed; what was collected is saved and the source is marked `partial`. A dropped connection, a timeout or a server error (5xx) gets one retry after 30 s, then the run stops cleanly.
+- **Direction:** `sourceText` = French (or English), `targetText` = Duala, spelled exactly as in the source. Duala→French dictionaries are inverted on import.
+- **One entry per sense:** "maison, demeure ; foyer" gives three entries with the same Duala word and the same reference.
+- **Audit of every gloss** (`ingestion/classify.ts`):
+  - a short sense ("être dur") stays vocabulary;
+  - a description ("exprime la surprise…", "sorte de poisson", a gloss of more than 6 words, a cross-reference "voir : …") becomes a **definition** (`contextual_meaning`, with the description in the note), which is never applied as a translation;
+  - a sentence on both sides becomes a **sentence example** (`sentence_example`), which shows word order.
+- **Provenance:** every entry has `reference` = the exact URL it came from. Wikimedia entries also record the revision id and the CC BY-SA 4.0 attribution in `note`.
+- **Status:** everything imported is `pending`. Nothing is marked `verified`; that is a speaker's job.
+- **Stable ids:** entry ids are UUIDs derived from (source, languages, category, source text, Duala text). Re-running an import updates the same entries and never resets a reviewer's status or note.
 
 ## 5. Gaps and honest limitations
 
-- **Nothing is verified yet.** All imported entries are `pending`: they are hints for the model ("Low"/"Moderate" evidence at most), not authoritative translations, until a Duala speaker reviews them.
-- **Two of the four sites from the email could not be used** (dictionnaireduala.com, Kemelang): their owners do not allow automated reuse. Glosbe is excluded by its terms. Obtaining permission (§6.3, §6.4) would add the most valuable data, in particular Philippe Mbappé Bessémè's normalised AGLC dictionary.
-- **Mixed orthographies:** Wiktionary pages use both AGLC spellings (ɓ, ɛ, ɔ, ŋ) and the older Meinhof notation (e̱, o̱ with a combining macron below). Mboa Sawa uses AGLC with tone marks. Entries are kept exactly as written; no conversion was attempted.
-- **Mboa Sawa's editorial quality is unknown.** Its word pages say historical content was migrated and examples are "à vérifier". Its reliability stays `unknown`.
-- **Licensing:** Wiktionary entries are CC BY-SA 4.0 (attribution kept per entry). Mboa Sawa states no licence; its entries are kept as pending research data with links, and the owners should be asked before any redistribution beyond this project.
-- The MEGA archive was not retrieved.
-- Printed dictionaries (Helmlinger 1972, Ittmann 1976) cannot be bulk-copied; the recommended path is manual verification of imported entries against them, with page references.
+- **Nothing is verified yet.** All entries are `pending`: documentation for the model, not authoritative translations, until a Duala speaker reviews them.
+- **Two of the four sites from the email could not be used** (dictionnaireduala.com, Kemelang): their owners do not allow automated reuse. Glosbe is excluded by its terms. Obtaining permission (§6.3, §6.4) would add the most valuable data.
+- **Mixed orthographies:** Wiktionary uses both AGLC (ɓ, ɛ, ɔ, ŋ) and Meinhof (e̱, o̱); Mboa Sawa often writes ę and q where AGLC has ɛ and ɔ. Everything is kept exactly as written; no conversion was attempted.
+- **Mboa Sawa:** its editorial quality is unknown and its glosses use printed-dictionary abbreviations. Its examples mix Duala and French without a separator: they are kept verbatim, not used as translations.
+- **Grammar is thin.** The open sources document noun classes, pronouns, possessives, demonstratives, word order and negation. They do not cover the past tense, aspect, the place of question words, or common greetings such as "bonjour" and "merci"; these are marked "non documenté" in the grammar sheet.
+- **Licensing:** Wiktionary and Wikipédia entries are CC BY-SA 4.0 (attribution kept per entry), WALS facts CC BY 4.0. Mboa Sawa states no licence: its entries are kept as pending research data with a link to each page; ask the owners before any redistribution beyond this project.
+- **No parallel corpus:** no French–Duala or English–Duala parallel text with a free licence was found (§6.10).
+- **MEGA archive:** not retrieved.
 
-## 6. Ingestion report (2026-11-13)
+## 6. Ingestion report (2026-11-14)
 
-| Source | Status | Entries imported | Requests |
+| Source | Status | Entries (2026-11-14) | Requests |
 | --- | --- | --- | --- |
-| Wiktionary fr (`wiktionary-dua`, sourceLanguage `fr`) | **Imported** | 878 (699 vocabulary, 178 sentence examples, 1 expression) from 412 pages | 10 API calls |
-| Wiktionary en (`wiktionary-dua`, sourceLanguage `en`) | **Imported** | 67 (58 vocabulary, 6 expressions, 3 grammar: noun-class prefixes) from 46 pages | 2 API calls |
-| Mboa Sawa (`mboasawa-dictionnaire-duala`) | **Import in progress** (partial snapshot in this commit) | 86 so far (letters A–B; the crawl continues letter by letter and the file will be updated in a follow-up commit) | one per word page + one per letter page, ≥ 3.5 s apart |
-| dictionnaireduala.com (`dictionnaireduala-com`) | **Refused by its terms** | 0 | 3 (robots.txt, home page, legal notice) |
-| Kemelang (`kemelang-duala`) | **Refused by robots.txt** | 0 | 2 (robots.txt, /duala/ landing page) |
-| Glosbe (`glosbe-fr-dua`) | **Excluded** (terms forbid scraping) | 0 | 0 |
+| Mboa Sawa (`mboasawa-dictionnaire-duala`) | **Imported, complete** (7,461 words) | 7,871: 6,611 vocabulary, 1,248 definitions, 8 sentence examples, 4 grammar rules | 76 API requests, 5 s apart |
+| Wiktionary fr (`wiktionary-dua`, `fr`) | **Imported** | 919: 682 vocabulary (incl. 58 from translation tables), 188 sentence examples, 41 definitions, 7 expressions, 1 grammar rule | 12 API requests |
+| Wiktionary en (`wiktionary-dua`, `en`) | **Imported** | 73: 61 vocabulary (incl. 15 from translation tables), 8 expressions, 3 grammar (noun-class prefixes), 1 definition | 4 API requests |
+| Wikipédia (`wikipedia-duala`) | **Imported** | 69: 50 vocabulary, 4 expressions, 4 sentence examples, 11 grammar rules | 3 API requests |
+| WALS Online (`wals-duala`) | **Used for grammar** | 8 grammar rules | 3 file downloads (CLDF) |
+| dictionnaireduala.com | **Refused by its terms** | 0 | 3 |
+| Kemelang | **Refused by robots.txt** | 0 | 2 |
+| Glosbe | **Excluded** (terms) | 0 | 0 |
+| Omniglot | **Not imported** (opts out of AI use) | 0 | 2 |
+| Wikipedia in Duala (Incubator) | **Not imported** (monolingual) | 0 | 2 |
+| eBible.org | **Nothing to import** (no Duala text) | 0 | 1 |
+
+Total: **8,940 entries** (8,867 French → Duala, 73 English → Duala), all `pending`; 8,916 have a Duala text. Before (commit fbbe5cf): 1,079 entries (945 Wiktionary, 86 Mboa Sawa, 48 interface terms without translation).
 
 ### 6.1 Mboa Sawa – https://mboasawa.com/fr/mboasawa-2/dictionnaire-duala/
 
-- **robots.txt:** `User-agent: *` disallows only `/application/`, `/development/`, `/externals/`, `/temporary/`. The dictionary is allowed.
-- **Terms / licence:** no terms-of-use or legal page is linked. The footer says "© 2026 byCamerfeeling / Mboasawa" and "This demo site is only for demonstration purposes … All content cited is derived from their respective sources". No licence grants reuse: the entries are kept as pending research data with links to every page, and the owners should be asked before redistribution.
-- **Structure:**
-  - **Letter pages** `?lettre=A` … `Z` list 50 distinct headwords per page. The HTML repeats the list twice, so it contains 100 `div.word-item` blocks. Each headword is in `div.words-list > div.word-item > div.word-dua > a`, which links to the word page.
-  - **The French column `div.word-fr` is empty** on letter pages. That is why the generic extractor found 0 entries (dry run, step b).
-  - **Pagination:** `div.mboa-pagination` (`span.current` + links `?lettre=A&mboa_page=N`), followed to the end.
-  - **Word pages** (`/fr/dictionnaire-duala/<slug>/`) contain `article.mboa-u-dict-sheet`: `.mboa-u-sheet-word` holds the Duala headword and `.mboa-u-sheet-translation > strong` the French translation ("sens principal"). An "Exemple à structurer" block holds unsegmented examples flagged "à vérifier", which are not imported.
-- **Extractor:** `packages/linguistic-knowledge/src/ingestion/sites/mboasawa.ts`, tested on real extracts in `packages/linguistic-knowledge/test/fixtures/mboasawa-*.html`.
-- **Cleaning rules:**
-  - The placeholder "Traduction à compléter" is ignored.
-  - Leading grammatical abbreviations ("interj.", "v.", "n.") move to the note.
-  - Senses are split as described in §4.
-- **Result:** in progress. In the snapshot committed on 2026-11-13: 86 entries from letters A and B, one per French sense, each with the URL of its word page. Letter B has only 13 headwords on the site.
-- **Problems / pages ignored:** the server regularly drops a connection ("other side closed"); the crawler pauses 30 s and retries once, and would stop on a second failure. No 403, 429 or CAPTCHA so far. Word pages showing "Traduction à compléter" (e.g. `ábu`) are skipped.
+- **robots.txt:** `User-agent: *` disallows only `/application/`, `/development/`, `/externals/`, `/temporary/`.
+- **Terms / licence:** no terms-of-use page. Footer: "© 2026 byCamerfeeling / Mboasawa". No licence grants reuse (see §5).
+- **Why there were only 86, then 324 entries:** two causes, neither the pagination nor the HTML extractor.
+  1. **The letter navigation is incomplete.** The WordPress sitemap (`/fr/wp-sitemap-posts-dictionnaire-1..4.xml`) lists **7,461** word pages. The A–Z buttons offer no ɓ, ɗ, ɛ, ŋ or ɔ, so the **1,146 words starting with ɓ** cannot be reached from any letter page. The B and D pages only show a handful of words (13 and 29) that start with a plain b or d.
+  2. **The crawl was interrupted twice** by the server (a read timeout, then HTTP 500). The old crawler then crashed instead of stopping cleanly.
+- **Fix:** the site's public WordPress REST API returns the same posts, 100 per request: `GET /fr/wp-json/wp/v2/dictionnaire?per_page=100&page=N&_fields=id,link,title,content`. robots.txt does not disallow it. This takes 75 requests, 5 s apart, instead of 7,461 page loads.
+  - `title` is the Duala headword;
+  - `content` is `French gloss###examples`;
+  - `link` is the word page URL, used as `reference`.
+- **Cleaning (`sites/mboasawa.ts`):** every removed piece goes to the note, and nothing is reworded.
+  - **Sense letters** ("b)") and **etymologies** ("(de l'angl. …)") move to the note.
+  - **"<description> – <sense>"** (derived forms, e.g. "f. caus. de tíka – mettre dans l'embarras") and **"<label> : <sense>"** (e.g. "interrog. de lieu : où?"): only the sense is kept as the translation.
+  - **Cross-references** "voir : …" are kept as definitions, never as translations.
+  - **Headword annotations** move to the note: homonym numbers "(2)", form markers "-edi" and "mi-", singular/plural pairs "ɓopánda / mi-ɓopánda". The spelling of the word itself is unchanged.
+  - **Examples after `###`** mix Duala and French without a separator. They are kept verbatim in the `example` field and never split.
+- **Result:** all 7,461 word pages read (76 requests, no 403/429/CAPTCHA). 104 have no translation on the site. After cleaning and the audit: 6,611 vocabulary entries, 1,248 definitions (descriptions, cross-references, grammatical labels), 8 sentence examples. Entries with the same French sense and the same Duala word on two homonym pages are merged (same id), keeping one page URL.
+- **Problems:**
+  - The server occasionally drops connections or answers 500. This is handled by a pause and one retry.
+  - One write failed on a Windows file lock (EPERM). The store now retries the rename, and the import was resumed from API page 69 with `--start-page`.
 
 ### 6.2 Wiktionary – fr.wiktionary.org and en.wiktionary.org
 
-- **Licence:** CC BY-SA 4.0, attribution required. Each entry links to its page (`reference`) and its `note` names the revision and "contributeurs du Wiktionnaire / Wiktionary contributors". Entries from this source are distributed under CC BY-SA 4.0 (see `data/knowledge/README.md`).
-- **robots.txt:** `User-agent: *` → `Disallow: /w/` (with exceptions for `api.php?action=mobileview` and `load.php`) and "Friendly, low-speed bots are welcome viewing article pages, but not dynamically-generated pages". The extraction did **not** crawl HTML pages: it used the **MediaWiki Action API** as requested, under Wikimedia's API etiquette (https://www.mediawiki.org/wiki/API:Etiquette): requests in series, an informative User-Agent with contact information, `maxlag=5`, and 50 titles per request. 12 requests were made in total, each at least 3.5 s apart.
-- **Categories:** fr `Catégorie:douala` (412 pages, with sub-categories by part of speech such as "Noms communs en douala" or "Verbes en douala"); en `Category:Duala lemmas` (46 pages).
-- **Structure (wikitext):**
-  - **fr:** section `== {{langue|dua}} ==`; parts of speech `=== {{S|nom|dua}} ===`; senses on `# …` lines; examples as `#* {{exemple|<duala>|sens=<français>|lang=dua}}` or `#* ''<duala>'' - <français>`. Sections marked `flexion` (plural forms, "{{p}} de …") are skipped.
-  - **en:** section `==Duala==`; headings `===Noun===` etc.; senses on `# …` lines (with `{{vern}}`/`{{taxlink}}` for plant names, which become notes); `{{R:Helmlinger1972|p=…}}` references are kept in the note ("cites Helmlinger (1972), p. 49"); derived terms `{{col|dua|ndabo a baboedi<t:a hospital>}}` become `expression` entries.
-- **Extractor:** `packages/linguistic-knowledge/src/ingestion/sites/wiktionary.ts`, tested on real extracts in `packages/linguistic-knowledge/test/fixtures/wiktionary-*.json`.
-- **Problems found and fixed during the dry run:**
-  - **Plural forms** produced "de mubakwedi" entries. These sections are now skipped.
-  - **HTML character references** (`de&#817;`) are now decoded to the real combining character (e̱, U+0331).
-  - **Proper nouns** keep their capital letter in English.
-- **Pages without a usable translation:**
-  - **fr:** 61 of 412, mostly inflected forms and stubs.
-  - **en:** 1 of 46 (`ngéngeti`, an "alternative form of" entry).
+- **Licence:** CC BY-SA 4.0. Each entry links to its page and its `note` names the revision and the contributors.
+- **robots.txt:** `Disallow: /w/` for generic crawlers. Extraction used only the **MediaWiki Action API**, under the API etiquette: serial requests, a User-Agent with a contact URL, `maxlag=5`, 50 titles per request, ≥ 3.5 s apart.
+- **Duala entries:** fr `Catégorie:douala` (412 pages), en `Category:Duala lemmas` (46 pages).
+  - **Definitions** give one entry per sense.
+  - **Usage examples with their translation** become `sentence_example` entries. Formats read: `{{exemple|…|sens=…}}`, `''…'' - …`, the two-line `#*` / `#*:` form, and en `{{ux|dua|…|…}}`.
+  - **en derived terms with a gloss** become `expression` entries.
+  - **Helmlinger page references** are kept in the note.
+- **Translation tables (new):** they give French → Duala and English → Duala pairs, with the sense in the note.
+  - **fr:** `Catégorie:Traductions en douala`, 49 French pages with `{{trad|dua|…}}` under `{{trad-début|sense}}`.
+  - **en:** `Category:Terms with Duala translations`, 17 English pages or `/translations` subpages with `{{t|dua|…}}` under `{{trans-top|sense}}`.
+  - **Skipped:** translations Wiktionary itself flags as unchecked (`{{t-check}}`, `{{checktrans-top}}`), e.g. "I love you" → "muléma" (heart).
+- **Result:** fr 919 entries (188 sentence examples, 10 more than before thanks to the two-line format; 58 from 49 translation-table pages), en 73 entries (15 from 17 translation-table pages; 2 pages had only unchecked translations).
 
 ### 6.3 dictionnaireduala.com – refused
 
 - **robots.txt:** none (HTTP 404).
-- **Terms:** the *Mentions légales* page (read 2026-11-13) states that dictionary entries and lexical databases are the exclusive property of Philippe Mbappé Bessémè. Consultation is reserved for personal, teaching or research use; reasonable quotations with attribution are allowed; "toute reproduction … diffusion ou réutilisation substantielle des contenus du site … est soumise à l'autorisation écrite préalable de l'éditeur".
-- **Decision:** a bulk import into a public repository is a substantial reuse, so **nothing was extracted**. Only the home page and the legal notice were fetched.
-- **Next step:** ask the publisher for a licence through the site's contact page. This would be the most valuable source: a normalised AGLC dictionary.
+- **Terms:** the *Mentions légales* page (read 2026-11-13) reserves the dictionary entries and lexical databases to Philippe Mbappé Bessémè and requires written permission for any substantial reuse.
+- **Decision:** **nothing extracted.** Next step: ask the publisher for a licence.
 
 ### 6.4 Kemelang – refused
 
-- **robots.txt:** the file opens with "Automated scraping of Kemelang data is strictly restricted. If you wish to access our dictionary datasets, audio corpora, or APIs for commercial or research purposes, please contact us at: contact@kemelang.com".
-  - **AI agents** are blocked by name with `Disallow: /`: `claude`, `anthropic`, `ClaudeBot`, `Claude-User`, `GPTBot`, …
-  - **Everyone else** (`User-agent: *`) cannot access `/api/` or `/translate/`, nor URLs with query parameters.
-- **Decision:** **not extracted.** Only robots.txt and the `/duala/` landing page were fetched for the assessment.
-- **Next step:** ask Kemelang for research access to their dataset (they mention a page at `/dictionary/datasets/download`).
+- **robots.txt:** "Automated scraping of Kemelang data is strictly restricted…"; AI agents (`claude`, `anthropic`, `ClaudeBot`, …) are blocked with `Disallow: /`.
+- **Decision:** **not extracted.** Next step: ask Kemelang for research access to their dataset.
 
 ### 6.5 Glosbe – excluded
 
-Not fetched at all. Its terms prohibit scraping. Use it only for manual checks by linguists.
+Not fetched. Its terms prohibit scraping.
+
+### 6.6 Wikipédia – « Duala (langue) » (fr) and « Duala language » (en) – imported
+
+- **Licence:** CC BY-SA 4.0. Read through the MediaWiki API (fr revision 241045385, en revision 1359233633).
+- **French article:** tables citing Nseme 1998, Helmlinger 1972 and duala.douala.free.fr. They cover personal pronouns, verbal prefixes, demonstratives, noun-class prefixes, basic words, months, body parts, a few phrases (including negative ones) and the numbers 1–10.
+- **English article:** the SVO word order, tones and the alphabet.
+- **Use:** tables imported as pending entries (`sites/wikipedia.ts`, 69 entries: basic words, months (October is missing from the article), body parts, numbers 1–10, 8 phrases, and 11 grammar rules of the sheet); grammar summarised in `data/knowledge/grammaire-douala.md`.
+
+### 6.7 WALS Online – Duala – used for the grammar sheet
+
+- **Licence:** CC BY 4.0. Values read from the CLDF release (`cldf-datasets/wals` v2020.4); wals.info itself has no robots restriction.
+- **Content:** 28 feature values for Duala, each citing a published grammar. They include the SVO order, noun–adjective and noun–genitive order, demonstrative–noun order, the preverbal negative particle (SNegVO), double-object "give", "and" = "with", the "exceed" comparative and a possible zero copula.
+- **Use:** grammar sheet rules G11, G17–G19, G21–G23, G25. No vocabulary.
+
+### 6.8 Wikipedia in Duala – not imported
+
+`dua.wikipedia.org` does not exist (DNS lookup fails). The Duala Wikipedia is a test project in the Wikimedia Incubator (`Wp/dua`, CC BY-SA). Its monolingual Duala text could later help with spelling and word frequency, but it has no translations, so nothing was imported.
+
+### 6.9 Omniglot – not imported
+
+robots.txt (2026-11-14) declares `Content-Signal: search=yes,ai-train=no,use=reference` for all agents and blocks `ClaudeBot` and other AI crawlers; the content is under copyright. Not imported.
+
+### 6.10 Parallel texts (eBible.org) – none found
+
+The eBible.org catalogue (`translations.csv`, 1,557 translations) lists no Duala translation. Wikipédia mentions the 19th-century Duala New Testament (Saker), but no machine-readable text with an explicitly free licence was found. Nothing imported.
+
+### 6.11 Audit of existing entries
+
+All dictionary entries were rebuilt from their sources with the audit of §4: 1,290 entries are now definitions instead of translations (1,248 from Mboa Sawa, 42 from Wiktionary, e.g. "exprime la surprise, le désespoir ou la douleur" → aba), and whole sentences are sentence examples (200).
+
+The 48 interface terms without a translation (`manual-linguist-entries`, `targetText: null`) were removed, since they could not help translate. The backend no longer seeds them (`SEED_UI_TERMS=false`).

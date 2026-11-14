@@ -107,7 +107,18 @@ export class InMemoryKnowledgeStore implements KnowledgeStore {
       await fs.mkdir(path.dirname(p), { recursive: true });
       const tmp = `${p}.tmp`;
       await fs.writeFile(tmp, content, "utf8");
-      await fs.rename(tmp, p);
+      // On Windows the target can be briefly locked (editor, indexer, antivirus): retry with
+      // backoff instead of failing the whole import.
+      for (let attempt = 1; ; attempt++) {
+        try {
+          await fs.rename(tmp, p);
+          break;
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if ((code !== "EPERM" && code !== "EBUSY" && code !== "EACCES") || attempt >= 8) throw err;
+          await new Promise((r) => setTimeout(r, 250 * attempt));
+        }
+      }
     });
     return this.writeQueue;
   }

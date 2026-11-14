@@ -20,6 +20,7 @@
     "test": "pnpm -r --no-bail test",
     "ingest": "pnpm --filter @douala-ai/backend ingest",
     "ingest:site": "pnpm --filter @douala-ai/backend ingest:site",
+    "ingest:grammar": "pnpm --filter @douala-ai/backend ingest:grammar",
     "coverage:check": "pnpm --filter @douala-ai/backend coverage:check",
     "ai:test-connection": "pnpm --filter @douala-ai/backend ai:test-connection",
     "e2e:live": "node scripts/e2e-live.mjs",

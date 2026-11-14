@@ -222,6 +222,7 @@ function enSection(wikitext: string): string | null {
 
 function definitions(section: string, wiki: WikiLang): Definition[] {
   const defs: Definition[] = [];
+  let pendingExample: { def: Definition; dua: string } | null = null;
   let pos: string | null = null;
   for (const rawLine of section.split(/\r?\n/)) {
     const line = rawLine.trimEnd();
@@ -256,6 +257,19 @@ function definitions(section: string, wiki: WikiLang): Definition[] {
         const dua = wikitextToPlain(plain[1]!);
         const tr = wikitextToPlain(plain[2]!).replace(/\.$/, "");
         if (dua && tr) last.examples.push({ dua, translation: tr });
+      }
+      // Two-line form: "#* ''Duala sentence''" followed by "#*: French translation".
+      const translationLine = /^#\*:\s*(.+)$/.exec(line);
+      if (translationLine && pendingExample && pendingExample.def === last) {
+        const tr = wikitextToPlain(translationLine[1]!).replace(/\.$/, "");
+        if (tr) last.examples.push({ dua: pendingExample.dua, translation: tr });
+        pendingExample = null;
+        continue;
+      }
+      pendingExample = null;
+      if (!plain && !line.includes("{{") && /^#\*\s*[^:\s]/.test(line)) {
+        const dua = wikitextToPlain(line.replace(/^#\*\s*/, ""));
+        if (dua) pendingExample = { def: last, dua };
       }
       for (const body of findTemplates(line, ["exemple", "ébauche-exe"])) {
         const { pos: p, named } = topLevelParams(body);
@@ -363,3 +377,102 @@ export function wiktionaryPairs(wiki: WikiLang, page: WiktionaryPage): Extracted
 }
 
 export const wiktionarySourceLanguage = (wiki: WikiLang): SourceLanguageCode => wiki;
+
+/* ------------------------------------------------------------------------- */
+/* Translation tables (French or English word → Duala)                        */
+/* ------------------------------------------------------------------------- */
+
+/** Pages whose translation tables contain a Duala translation (hidden tracking categories). */
+export const WIKTIONARY_TRANSLATION_CATEGORY: Record<WikiLang, string> = { fr: "Catégorie:Traductions en douala", en: "Category:Terms with Duala translations" };
+
+function sectionOf(wikitext: string, start: RegExp): string | null {
+  const m = start.exec(wikitext);
+  if (!m) return null;
+  const rest = wikitext.slice(m.index + m[0].length);
+  const end = /^==[^=]/m.exec(rest);
+  return end ? rest.slice(0, end.index) : rest;
+}
+
+/**
+ * Duala translations listed in the translation tables of a French page (fr.wiktionary, section
+ * `== {{langue|fr}} ==`, lines `* {{T|dua}} : {{trad+|dua|mot}}` under `{{trad-début|sens}}`) or of
+ * an English page (en.wiktionary, section `==English==` or a `/translations` subpage, lines
+ * `* Duala: {{t|dua|word}}` under `{{trans-top|gloss}}`). The page title is the source word.
+ * Translations Wiktionary itself flags as unchecked ({{t-check}}, {{checktrans-top}}) are skipped.
+ */
+export function wiktionaryTranslationPairs(wiki: WikiLang, page: WiktionaryPage): ExtractedPair[] {
+  const isSubpage = page.title.endsWith("/translations");
+  const sourceWord = page.title.replace(/\/translations$/, "");
+  const section = isSubpage ? page.wikitext : wiki === "fr" ? sectionOf(page.wikitext, /^==\s*\{\{langue\|fr\}\}\s*==\s*$/m) : sectionOf(page.wikitext, /^==\s*English\s*==\s*$/m);
+  if (!section) return [];
+  const url = wiktionaryPageUrl(wiki, page.title);
+  const attribution =
+    wiki === "fr"
+      ? `Wiktionnaire (fr), section Traductions, révision ${page.revid}, ${WIKTIONARY_LICENCE}, contributeurs du Wiktionnaire`
+      : `Wiktionary (en), Translations, revision ${page.revid}, ${WIKTIONARY_LICENCE}, Wiktionary contributors`;
+  const out: ExtractedPair[] = [];
+  let pos: string | null = null;
+  let sense: string | null = null;
+  let unchecked = false;
+  for (const rawLine of section.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const heading = /^(={3,6})\s*(.*?)\s*\1$/.exec(line);
+    if (heading) {
+      const title = heading[2]!;
+      if (wiki === "fr") {
+        const m = /\{\{S\|([^|}]+)/.exec(title);
+        const type = m?.[1]?.trim() ?? "";
+        if (type === "traductions à trier") sense = "sens non précisé (traductions à trier)";
+        // Only part-of-speech headings set the context (not "synonymes", "dérivés"…).
+        else if (type && type !== "traductions" && !FR_NON_POS.test(type) && !/^(hyponymes|hyperonymes|vocabulaire|variantes|apparentés|dérivés)/i.test(type)) pos = type;
+      } else if (EN_POS.test(title)) pos = title.toLowerCase();
+      continue;
+    }
+    if (wiki === "fr") {
+      const start = /^\{\{trad-début(?:\|([^|}]*))?/.exec(line);
+      if (start) {
+        sense = start[1]?.trim() ? wikitextToPlain(start[1]) : null;
+        continue;
+      }
+      if (/^\{\{trad-fin\}\}/.test(line)) {
+        sense = null;
+        continue;
+      }
+      if (!/\{\{T\|dua\}\}/.test(line)) continue;
+    } else {
+      if (/^\{\{checktrans-top/.test(line)) {
+        unchecked = true;
+        continue;
+      }
+      const top = /^\{\{trans-top(?:-see)?\|([^}]*)\}\}/.exec(line);
+      if (top) {
+        unchecked = false;
+        sense = top[1]!.split("|").map((p) => p.trim()).filter((p) => !/^[\w-]+=/.test(p))[0] ?? null;
+        continue;
+      }
+      if (/^\{\{trans-bottom\}\}/.test(line)) {
+        sense = null;
+        unchecked = false;
+        continue;
+      }
+      if (unchecked || !/^\*:?\s*Duala\s*:/.test(line)) continue;
+    }
+    const names = wiki === "fr" ? ["trad", "trad+", "trad-", "trad--"] : ["t", "t+", "tt", "tt+"];
+    for (const body of findTemplates(line, names)) {
+      const { pos: p, named } = topLevelParams(body);
+      if (p[0] !== "dua") continue;
+      const duala = wikitextToPlain(named.alt ?? p[1] ?? "");
+      if (!duala) continue;
+      out.push({
+        sourceText: sourceWord,
+        targetText: duala,
+        category: /\s/.test(sourceWord.trim()) ? "expression" : "vocabulary",
+        context: pos,
+        note: [sense ? `${wiki === "fr" ? "Sens" : "Sense"} : ${sense}` : null, attribution].filter(Boolean).join(" — "),
+        reference: url,
+        tags: ["wiktionary", `wiktionary-${wiki}`, "translation-table"],
+      });
+    }
+  }
+  return out;
+}

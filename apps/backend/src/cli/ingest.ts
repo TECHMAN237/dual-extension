@@ -4,10 +4,10 @@
  * Usage:
  *   pnpm ingest --source <sourceId> --url <https://...> --lang fr [--format html|pdf|csv|json|text] [--strategy auto|table|dl|lines] [--dry-run]
  *   pnpm ingest --source <sourceId> --file <path> --lang fr [--format ...]
- *   pnpm ingest --source manual-linguist-entries --file glossaire.csv --lang fr --verified [--reviewer "Name"]
+ *   pnpm ingest --source manual-linguist-entries --file verified-by-speaker.csv --lang fr --format csv --verified [--reviewer "Name"]
  *
  * Everything ingested is stored as `pending` / `extracted_unverified`, except with --verified:
- * a glossary filled in by a Duala speaker (source manual-linguist-entries only) is stored as
+ * a list of entries checked by a Duala speaker (source manual-linguist-entries only) is stored as
  * `verified`; rows without a Duala translation are skipped.
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -44,7 +44,7 @@ async function main() {
   }
   const verified = flag("verified");
   if (verified && sourceId !== VERIFIED_IMPORT_SOURCE_ID) {
-    console.error(`--verified is only allowed with --source ${VERIFIED_IMPORT_SOURCE_ID} (a glossary filled in by a Duala speaker). Dictionary imports always stay pending.`);
+    console.error(`--verified is only allowed with --source ${VERIFIED_IMPORT_SOURCE_ID} (entries checked by a Duala speaker). Dictionary imports always stay pending.`);
     process.exit(1);
   }
   const config = loadConfig();

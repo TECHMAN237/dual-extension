@@ -200,4 +200,4 @@ For every line the command prints how it would be handled:
 
 It ends with the percentages. It never calls the model and writes nothing.
 
-On 2026-11-13 the 20 texts of the sample bank page gave **0 %** before and after these changes. The words of that page (solde, frais, banque, bénéficiaire, transfert, compte, paiement, bonjour…) are not in the knowledge base yet. The way forward is the speaker glossary (`data/knowledge/glossaire-a-traduire.csv`, see `data/knowledge/README.md`), not the model.
+On 2026-11-13 the 20 texts of the sample bank page gave **0 %** before and after these changes. The words of that page (solde, frais, banque, bénéficiaire, transfert, compte, paiement, bonjour…) are not in the knowledge base yet. The way forward is a larger documentation (`data/knowledge/`), not the model.

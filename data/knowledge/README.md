@@ -1,52 +1,55 @@
 # DOUALA AI knowledge base
 
-`douala.json` is the project's knowledge base, versioned in Git. The backend loads it at
-startup, locally and on Render. No database is needed.
+This folder is the Duala documentation the translation engine relies on. It is versioned in Git; the backend loads it at startup, locally and on Render. No database is needed.
 
-- Format: `{ "version": 1, "sources": [...], "entries": [...] }`. Sources and entries are sorted by `id`, indented with 2 spaces and end with a newline, so diffs stay readable.
-- Every entry stores its provenance: `sourceId`, `sourceName`, `reference` (exact URL of the page it came from) and, for Wiktionary, the revision id and licence in `note`.
-- Direction: `sourceText` is French (`sourceLanguage: "fr"`) or English (`"en"`); `targetText` is Duala, spelled exactly as in the source (tones, ɓ ɗ ɛ ɔ ŋ, Meinhof diacritics such as e̱).
-- **Everything imported is `pending`.** Nothing here is verified yet: a Duala speaker must review entries (admin page `/admin/`) before they count as high evidence. Entries with `targetText: null` are interface terms that still need a translation.
+| File | Content |
+| --- | --- |
+| `douala.json` | Dictionary (French and English → Duala), definitions, sentence examples and grammar rules, each with its source |
+| `grammaire-douala.md` | Grammar sheet: one rule per paragraph, each with its source; points the open sources do not cover are marked "non documenté" |
+| `samples/` | Sample texts used by `pnpm coverage:check` |
+
+## `douala.json`
+
+- **Format:** `{ "version": 1, "sources": [...], "entries": [...] }`. Sources and entries are sorted by `id`, indented with 2 spaces and end with a newline, so diffs stay readable.
+- **Provenance:** every entry stores `sourceId`, `sourceName` and `reference`, the exact URL of the page it came from. Wikimedia entries also record the revision id and the licence in `note`.
+- **Direction:** `sourceText` is French (`sourceLanguage: "fr"`) or English (`"en"`). `targetText` is Duala, spelled exactly as in the source: tones, ɓ ɗ ɛ ɔ ŋ, Meinhof diacritics such as e̱, and Mboa Sawa's ę/q.
+- **Categories:**
+  - `vocabulary` and `expression`: translation equivalents;
+  - `contextual_meaning`: **definitions** ("exprime la surprise…", "voir : …"). They explain a Duala word and are never applied as a translation;
+  - `sentence_example`: whole sentences on both sides, which show word order;
+  - `grammar_rule`: the rules of `grammaire-douala.md`, with their source.
+- **Status:** everything imported is `pending`. Pending entries are usable documentation; a Duala speaker must review them (admin page `/admin/`) before they count as verified.
 
 ## Updating it
 
 ```bash
-pnpm ingest:site --site wiktionary-fr      # or wiktionary-en, mboasawa (see docs/LINGUISTIC_RESEARCH.md)
-git add data/knowledge/douala.json && git commit -m "Update knowledge base"
+pnpm ingest:site --site mboasawa-api            # also: wiktionary-fr, wiktionary-en, wiktionary-fr-translations,
+                                                #       wiktionary-en-translations, wikipedia-fr (docs/LINGUISTIC_RESEARCH.md §4)
+pnpm ingest:grammar                             # after editing grammaire-douala.md
+git add data/knowledge && git commit -m "Update knowledge base"
 ```
 
-Entry ids are deterministic (derived from source, languages and text), so re-importing a page updates the same entries and never resets a human review. On Render, changes made through the admin page are kept in memory only and are lost at the next restart: make lasting changes here and commit them.
+Entry ids are deterministic (derived from source, languages, category and text), so re-importing updates the same entries and never resets a human review. On Render, changes made through the admin page are kept in memory only and are lost at the next restart: make lasting changes here and commit them.
 
-## Speaker glossary (`glossaire-a-traduire.csv`)
+## Validation by a Duala speaker
 
-`glossaire-a-traduire.csv` lists about 320 common French terms of websites and financial services, grouped by context: navigation, forms, politeness, banking, mobile money, status messages, dates and general words. **Its `target_text` column is intentionally empty**: no Duala was written by the project.
+Entries checked by a Duala speaker can be imported as **verified** from a CSV file (columns `source_language,source_text,target_text,category,context,note`). This is only allowed for the source `manual-linguist-entries`; rows without a Duala translation are skipped:
 
-Columns: `source_language,source_text,target_text,category,context,note`.
-
-1. A Duala speaker fills `target_text`, in AGLC orthography with tones, for the terms they are sure of. Leave the cell empty when unsure, and add remarks in `note` if needed. Keep the file in UTF-8.
-2. Import the filled file as **verified** entries. This is only allowed for the source `manual-linguist-entries`; rows still empty are skipped:
-
-   ```bash
-   pnpm ingest --source manual-linguist-entries --file data/knowledge/glossaire-a-traduire.csv --lang fr --format csv --verified --reviewer "Name of the speaker" --dry-run   # check
-   pnpm ingest --source manual-linguist-entries --file data/knowledge/glossaire-a-traduire.csv --lang fr --format csv --verified --reviewer "Name of the speaker"
-   ```
-
-   Verified entries are applied directly, with "high" evidence and no review flag. Re-importing the same file updates the same entries. Without `--verified` the same command imports them as `pending`.
-3. Measure the effect, then commit `douala.json`:
-
-   ```bash
-   pnpm coverage:check                       # samples/banque.txt by default
-   git add data/knowledge && git commit -m "Add speaker-verified glossary entries"
-   ```
-
-`samples/banque.txt` holds the 20 texts of a sample bank page. It is used by `pnpm coverage:check` to track progress.
+```bash
+pnpm ingest --source manual-linguist-entries --file verified-by-speaker.csv --lang fr --format csv --verified --reviewer "Name of the speaker" --dry-run   # check
+pnpm ingest --source manual-linguist-entries --file verified-by-speaker.csv --lang fr --format csv --verified --reviewer "Name of the speaker"
+```
 
 ## Licences and attribution
 
 | Source (`sourceId`) | Licence | Notes |
 | --- | --- | --- |
-| `wiktionary-dua` | **CC BY-SA 4.0**. © Wiktionary / Wiktionnaire contributors | Entries from fr.wiktionary.org (Catégorie:douala) and en.wiktionary.org (Category:Duala lemmas). Each entry links to its page and records the revision id. If you redistribute these entries, keep the attribution and share them under CC BY-SA 4.0. |
-| `mboasawa-dictionnaire-duala` | No licence stated. © Camerfeeling / Mboasawa | Imported as pending research data with a link to every page. No terms of use were found and robots.txt allows the dictionary, but the site does not grant reuse rights: ask the owners before redistributing beyond this project. |
-| `manual-linguist-entries` | Project licence (MIT) | Interface terms with empty translations (`seed/ui-terms.en-fr.csv`). |
+| `wiktionary-dua` | **CC BY-SA 4.0**. © Wiktionary / Wiktionnaire contributors | Duala entries, usage examples and translation tables of fr.wiktionary.org and en.wiktionary.org. Each entry links to its page and records the revision id. If you redistribute these entries, keep the attribution and share them under CC BY-SA 4.0. |
+| `wikipedia-duala` | **CC BY-SA 4.0**. © Wikipédia / Wikipedia contributors | Tables of the article « Duala (langue) » (fr) and grammar rules drawn from it and from « Duala language » (en). |
+| `wals-duala` | **CC BY 4.0**. Dryer & Haspelmath (eds.), *WALS Online* | Grammar rules only (word order, negation…), each citing a published grammar. |
+| `mboasawa-dictionnaire-duala` | No licence stated. © Camerfeeling / Mboasawa | The whole dictionary (7,461 words), imported as pending research data with a link to every page. The site grants no reuse rights: ask the owners before redistributing beyond this project. |
+| `manual-linguist-entries` | Project licence (MIT) | Reserved for entries checked by a Duala speaker. |
 
-Not imported, on purpose: dictionnaireduala.com (its legal notice forbids substantial reuse without written permission), Kemelang (robots.txt restricts automated scraping and blocks AI agents) and Glosbe (terms forbid scraping). See `docs/LINGUISTIC_RESEARCH.md`.
+`grammaire-douala.md` is written in the project's own words; it cites Wikipédia/Wikipedia (CC BY-SA 4.0), WALS (CC BY 4.0), Wiktionary (CC BY-SA 4.0) and Mboa Sawa pages for its examples.
+
+Not imported, on purpose: dictionnaireduala.com (its legal notice forbids substantial reuse without written permission), Kemelang (robots.txt restricts automated scraping and blocks AI agents), Glosbe (terms forbid scraping), Omniglot (opts out of AI use) and the Duala Wikipedia in the Incubator (monolingual). See `docs/LINGUISTIC_RESEARCH.md`.

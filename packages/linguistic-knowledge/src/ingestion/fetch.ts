@@ -137,6 +137,9 @@ export class PoliteSession {
       const res = await this.raw(url, accept);
       if (res.status === 403 || res.status === 429) throw new SiteBlockedError(`HTTP ${res.status}: the site refused the request. Stopping, not retrying.`, target, res.status);
       if (res.status === 404) return null;
+      // A server error (5xx) is treated like a dropped connection: one pause and one retry,
+      // then the run stops cleanly (SiteBlockedError) with what was already collected.
+      if (res.status >= 500) throw new Error(`HTTP ${res.status}`);
       if (!res.ok) throw new HttpStatusError(`HTTP ${res.status} for ${target}`);
       // Reading the body can time out too: it is part of the same attempt.
       const buf = Buffer.from(await res.arrayBuffer());

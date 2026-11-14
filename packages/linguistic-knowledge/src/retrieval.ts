@@ -45,7 +45,8 @@ function jaccard(a: Set<string>, b: Set<string>): number {
 export const MIN_OVERLAP_RELEVANCE = 0.5;
 
 /** Categories whose target text can stand for the source text (grammar notes cannot). */
-export const TRANSLATABLE_CATEGORIES: ReadonlySet<KnowledgeEntry["category"]> = new Set(["vocabulary", "expression", "translation_pair", "sentence_example", "contextual_meaning", "language_variant"]);
+// contextual_meaning holds definitions ("exprime la surprise…"): they explain a word, they do not translate it.
+export const TRANSLATABLE_CATEGORIES: ReadonlySet<KnowledgeEntry["category"]> = new Set(["vocabulary", "expression", "translation_pair", "sentence_example", "language_variant"]);
 
 /**
  * Score a single entry against a query; exported for tests.

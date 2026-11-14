@@ -1,0 +1,194 @@
+<!-- Extrait de https://fr.wikipedia.org/wiki/Duala_(langue), révision 241045385, wikitexte via l'API MediaWiki le 2026-11-14. CC BY-SA 4.0, contributeurs de Wikipédia. Fixture de test. -->
+== Grammaticale ==
+
+{| class="wikitable"
+! Mot        || Traduction
+
+|--
+| terre      ||wásē, minyáŋgádú
+|}
+
+{| class="wikitable"
+|--
+| ciel       ||diɓoɓɛ
+
+|--
+| eau        || madíɓá
+
+|--
+| feu        || wéá
+
+|--
+| homme      ||moto, momé
+
+|--
+| femme      || múto
+
+|--
+|    l'enfant  ||   múna
+
+|-- 
+|   être humain    || moto a ɓenama
+
+|--
+| manger     || ɗá
+
+|--
+| boire      || nyɔ́
+
+|--
+| grand      || -ndɛ̄nɛ, éndɛ̄nɛ, ɓondɛ́nɛ 
+|--
+| gros      || kola
+
+|--
+| petit      || -sadi, sala, ɓosadi
+
+|--
+| nuit       || bulú
+
+|--
+| jour       || búnyá, sú
+
+|--
+| amour        || ndóló
+
+|--
+| oui        || Ee
+
+|--
+|  non       ||kɛ́m
+|}
+
+=== les mois de l'année ===
+{| class="wikitable"
+!Mot
+!Traduction<ref>{{Lien web|titre=Apprendre la langue douala et le vocabulaire, dictionnaire thématique|url=http://duala.douala.free.fr/|site=duala.douala.free.fr|consulté le=2017-11-26}}</ref>
+|-
+|Janvier
+|Dimɔ́di
+|-
+|Février
+|ŋgɔndɛ
+|-
+|Mars
+|Sɔŋɛ
+|-
+|Avril
+|Diɓáɓá
+|-
+|Mai
+|Emiasɛlɛ
+|-
+|Juin
+|Esɔpɛ́sɔpɛ
+|-
+|Juillet
+|Madíɓɛ́díɓɛ́
+|-
+|Août
+|Diŋgíndí
+|-
+|Septembre
+|Nyɛtɛki
+|-
+|Novembre
+|Tiníní
+|-
+|Décembre
+|Eláŋɛ́
+|}
+
+=== le corps ===
+
+{| class="wikitable"
+! Mot        || Traduction 
+  
+|--
+|   le cœur (les cœurs)   || muléma  (miléma)
+
+|--
+|  la tête    ||  mulópō
+
+|--
+|  la bouche  ||  mundumbu
+
+|--
+| la dent (les dents)    ||  soŋgá (masoŋgá)
+
+|--
+|  le ventre           ||  dibum
+
+|--
+|l'œil (les yeux)|| dísɔ (mísɔ)
+|}
+
+----
+
+=== quelques phrases ===
+
+{| class="wikitable"
+! Mot        || Traduction
+
+|--
+|  je sais   ||na bi
+
+|--
+|   je ne sais pas    || na sí bí
+
+|--
+| je veux manger || na púlá dá
+
+|--
+|   je ne veux pas manger   || na sí ma púlá dá
+
+|--
+|  je veux boire de l'eau  || na  púlá ñó madíbá
+
+|--
+| donne - moi de l'eau      || bolá mbá madíbá
+
+|--
+| S'il te plait      || son
+
+|--
+|Je t'aime            || Na tondi  wa
+|}
+
+----
+
+=== les chiffres ===
+
+{| class="wikitable"
+! Mot        || Traduction
+
+|--
+|    un   ||   ewɔ̄  (mɔ, diwɔ, bɔ, pɔ...)
+
+|--
+| deux      ||  béɓǎ (miɓa, maɓa, baɓa, iɓa...)
+
+|--
+|  trois     ||  bélálo (milalo, malalo, balalo, ilalo...)
+
+|--
+|quatre         ||  bénɛí (minéi, manéi, banéi, inéi...)
+
+|--
+| cinq            ||  bétánu (mitanu, matanu, batanu, itanu...)
+
+|--
+| six      ||  mutōɓā
+
+|--
+|  sept    ||  sǎmbā
+
+|--
+|  huit    || lɔmbi
+
+|--
+|   neuf   || dibuā
+
+|--
+|  dix    ||  ɗôm  
+|}

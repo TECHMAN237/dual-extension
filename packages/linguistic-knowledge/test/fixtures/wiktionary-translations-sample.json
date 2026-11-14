@@ -1,0 +1,20 @@
+{
+  "attribution": "Extracts of fr.wiktionary.org (maison) and en.wiktionary.org (water/translations, I love you), CC BY-SA 4.0, Wiktionary contributors. Fetched through the MediaWiki API on 2026-11-14, trimmed to the translation lines (one synthetic line outside the French section, marked faux-exemple-hors-section, tests the section boundary).",
+  "pages": [
+    {
+      "title": "maison",
+      "revid": 39996395,
+      "wikitext": "== {{langue|fr}} ==\n\n==== {{S|traductions}} ====\n{{trad-début|Bâtiment servant de logis, d’habitation, de demeure|1}}\n* {{T|dua}} : {{trad|dua|n’dabo}}\n{{trad-fin}}\n\n{{trad-début|Foyer|2}}\n* {{T|af}} : {{trad+|af|tuiste}}\n{{trad-fin}}\n\n== {{langue|en}} ==\n* {{T|dua}} : {{trad|dua|faux-exemple-hors-section}}"
+    },
+    {
+      "title": "water/translations",
+      "revid": 95362246,
+      "wikitext": "==English==\n====Translations====\n{{multitrans|data=\n{{trans-top|id=Q283|inorganic compound H₂O}}\n* Duala: {{tt|dua|madíbá|6}}\n{{trans-bottom}}"
+    },
+    {
+      "title": "I love you",
+      "revid": 95432668,
+      "wikitext": "==English==\n====Translations====\n{{checktrans-top}}\n* Duala: {{t-check|dua|muléma}}\n{{trans-bottom}}"
+    }
+  ]
+}

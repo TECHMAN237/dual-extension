@@ -52,7 +52,7 @@ describe("Mboa Sawa extractor (real HTML extracts in test/fixtures)", () => {
     const url = "https://mboasawa.com/fr/dictionnaire-duala/aban%c9%9b/";
     const word = parseMboasawaWordPage(fixture("mboasawa-word-abane.html"));
     expect(word).toEqual({ headword: "abaŋɛ", translation: "partager" });
-    expect(mboasawaPairs(word!, url)).toEqual([{ sourceText: "partager", targetText: "abaŋɛ", category: "vocabulary", note: null, reference: url, tags: ["mboasawa"] }]);
+    expect(mboasawaPairs(word!, url)).toEqual([{ sourceText: "partager", targetText: "abaŋɛ", category: "vocabulary", note: null, example: null, reference: url, tags: ["mboasawa"] }]);
   });
 
   it("splits senses, moves grammatical abbreviations to the note and skips placeholders", () => {

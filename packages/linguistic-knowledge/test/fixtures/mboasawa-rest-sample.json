@@ -1,0 +1,38 @@
+{
+  "note": "Extract of https://mboasawa.com/fr/wp-json/wp/v2/dictionnaire?per_page=3 fetched 2026-11-14 (fields id, link, title, content). (c) Camerfeeling / Mboasawa. Test fixture only.",
+  "posts": [
+    {
+      "id": 72516,
+      "link": "https://mboasawa.com/fr/dictionnaire-duala/umbise-3/",
+      "title": {
+        "rendered": "umbisę"
+      },
+      "content": {
+        "rendered": "<p>faire frapper; faire sonner###~ nqęń faire sonner les cloches</p>\n",
+        "protected": false
+      }
+    },
+    {
+      "id": 72515,
+      "link": "https://mboasawa.com/fr/dictionnaire-duala/um%c9%93ele-3/",
+      "title": {
+        "rendered": "úmɓęlę"
+      },
+      "content": {
+        "rendered": "<p>tourner le dos à q.###~ mba mɓúsa il m&#8217;a tourné le dos</p>\n",
+        "protected": false
+      }
+    },
+    {
+      "id": 72514,
+      "link": "https://mboasawa.com/fr/dictionnaire-duala/um%c9%93e-3/",
+      "title": {
+        "rendered": "úmɓę"
+      },
+      "content": {
+        "rendered": "<p>tourner le dos###póndá na púlínq kwálisanę mọ, ~ mɓúsa au moment où je voulais lui parler, il a tourné le dos</p>\n",
+        "protected": false
+      }
+    }
+  ]
+}

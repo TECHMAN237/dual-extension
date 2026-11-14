@@ -43,7 +43,7 @@
     ],
     "accessibility": "public",
     "license": "No licence stated. Footer: \"© 2026 byCamerfeeling / Mboasawa\" and \"All content cited is derived from their respective sources\". No terms-of-use page found (checked 2026-11-13). Treat as copyrighted: entries are kept as pending research data with a link to each page; ask the owners for permission before any redistribution beyond this project.",
-    "notes": "Inspected 2026-11-13. robots.txt (User-agent: *) only disallows /application/, /development/, /externals/, /temporary/: the dictionary is allowed. Letter pages ?lettre=A..Z list 100 Duala headwords per page (div.word-item > div.word-dua > a) with pagination ?mboa_page=N; the French column (div.word-fr) is empty on list pages, so each word page is opened (article.mboa-u-dict-sheet: .mboa-u-sheet-word = Duala, .mboa-u-sheet-translation strong = French). Duala→French: pairs are inverted on import. Editorial process unknown (community/cultural site; word pages say historical content was migrated and examples are \"à vérifier\"). Reliability left at unknown until checked against Helmlinger (1972). Extractor: packages/linguistic-knowledge/src/ingestion/sites/mboasawa.ts; command: pnpm ingest:site --site mboasawa.",
+    "notes": "Inspected 2026-11-13/14. robots.txt (User-agent: *) only disallows /application/, /development/, /externals/, /temporary/. The WordPress sitemap (wp-sitemap-posts-dictionnaire-1..4.xml) lists 7,461 word pages, but the A–Z letter navigation reaches only part of them: 1,146 words start with ɓ (no letter button) and the B and D pages show only a few words. The complete dictionary is read through the site's public WordPress REST API (/fr/wp-json/wp/v2/dictionnaire, 100 words per request, ≥ 5 s apart): title = Duala headword, content = \"French gloss###examples\". Pairs are inverted (French → Duala). Examples mix Duala and French without a separator (the site itself marks them \"à vérifier\"): kept verbatim in the entry's example field, never split or imported as translations. The source often writes ę and q where AGLC uses ɛ and ɔ (probably an old font substitution): kept exactly as written, not converted. Editorial process unknown; reliability left at unknown until checked against Helmlinger (1972). Extractor: packages/linguistic-knowledge/src/ingestion/sites/mboasawa.ts; command: pnpm ingest:site --site mboasawa-api.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
   },
@@ -127,7 +127,7 @@
     ],
     "accessibility": "public",
     "license": "CC BY-SA 4.0 (attribution and share-alike required). Attribution: Wiktionary / Wiktionnaire contributors; each entry links to its page and records the revision id in its note. Entries from this source in data/knowledge/douala.json are distributed under CC BY-SA 4.0.",
-    "notes": "Read 2026-11-13 through the MediaWiki Action API (wikitext), never HTML. Categories: fr \"Catégorie:douala\" (412 pages, section == {{langue|dua}} ==, French definitions) and en \"Category:Duala lemmas\" (46 pages, section ==Duala==, English definitions). robots.txt disallows /w/ for generic crawlers; the API was used under the MediaWiki API etiquette (serial requests, descriptive User-Agent with a contact URL, maxlag=5, ≥ 3.5 s between requests), which explicitly allows programmatic clients. Community-edited: some pages use the older Meinhof orthography (e.g. be̱) next to AGLC spellings; both are kept as written. Extractor: packages/linguistic-knowledge/src/ingestion/sites/wiktionary.ts; command: pnpm ingest:site --site wiktionary-fr|wiktionary-en.",
+    "notes": "Read through the MediaWiki Action API (wikitext), never HTML. Duala entries: fr \"Catégorie:douala\", en \"Category:Duala lemmas\" (definitions and usage examples with their translation). Translation tables: fr \"Catégorie:Traductions en douala\" (French pages with {{trad|dua|…}}), en \"Category:Terms with Duala translations\" (English pages with {{t|dua|…}}); translations Wiktionary flags as unchecked ({{t-check}}, {{checktrans-top}}) are skipped. API etiquette: serial requests, descriptive User-Agent with a contact URL, maxlag=5, ≥ 3.5 s apart. Community-edited: AGLC and Meinhof spellings coexist and are kept as written. Commands: pnpm ingest:site --site wiktionary-fr | wiktionary-en | wiktionary-fr-translations | wiktionary-en-translations.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
   },
@@ -147,5 +147,81 @@
     "notes": "Use this source for vocabulary, expressions and grammar rules typed by native speakers and linguists through the admin interface or the ingest CLI. Entries still start as `pending` and must be approved.",
     "ingestionStatus": "not_ingested",
     "lastIngestedAt": null
+  },
+  {
+    "id": "wikipedia-duala",
+    "ingestionStatus": "not_ingested",
+    "lastIngestedAt": null,
+    "name": "Wikipédia – « Duala (langue) » (fr) and « Duala language » (en)",
+    "url": "https://fr.wikipedia.org/wiki/Duala_(langue)",
+    "type": "community",
+    "reliability": "community",
+    "languages": [
+      "dua",
+      "fr",
+      "en"
+    ],
+    "accessibility": "public",
+    "license": "CC BY-SA 4.0 (attribution and share-alike). Contributors of Wikipédia / Wikipedia.",
+    "notes": "Read 2026-11-14 through the MediaWiki API (fr revision 241045385, en revision 1359233633). The French article cites Nseme (1998), Helmlinger (1972) and duala.douala.free.fr for its tables (pronouns, verbal prefixes, demonstratives, noun-class prefixes, basic words, months, body parts, phrases, numbers). Tables imported as pending entries; grammar summarised in data/knowledge/grammaire-douala.md. Command: pnpm ingest:site --site wikipedia-fr."
+  },
+  {
+    "id": "wals-duala",
+    "ingestionStatus": "not_ingested",
+    "lastIngestedAt": null,
+    "name": "WALS Online – Duala (wals_code dua), Dryer & Haspelmath (eds.), 2013",
+    "url": "https://wals.info/languoid/lect/wals_code_dua",
+    "type": "academic_publication",
+    "reliability": "academic",
+    "languages": [
+      "dua"
+    ],
+    "accessibility": "public",
+    "license": "CC BY 4.0 (WALS Online, Max Planck Institute for Evolutionary Anthropology). Values read from the CLDF release cldf-datasets/wals v2020.4.",
+    "notes": "28 feature values for Duala (word order SVO, noun–adjective, noun–genitive, demonstrative–noun, preverbal negative particle, double-object 'give', 'exceed' comparative…), each citing Ittmann (1939, 1978), Meinhof (1912) or Biloa (1993). Used for the grammar sheet only (no vocabulary)."
+  },
+  {
+    "id": "wikipedia-incubator-dua",
+    "ingestionStatus": "not_ingested",
+    "lastIngestedAt": null,
+    "name": "Wikipedia in Duala (Wikimedia Incubator, Wp/dua)",
+    "url": "https://incubator.wikimedia.org/wiki/Wp/dua",
+    "type": "corpus",
+    "reliability": "community",
+    "languages": [
+      "dua"
+    ],
+    "accessibility": "public",
+    "license": "CC BY-SA 4.0",
+    "notes": "NOT IMPORTED. dua.wikipedia.org does not exist (DNS lookup fails, 2026-11-14); the Duala Wikipedia is a test project in the Incubator. Monolingual Duala text: useful later for spelling and word frequency, but it contains no translations, so nothing was imported."
+  },
+  {
+    "id": "omniglot-duala",
+    "ingestionStatus": "not_ingested",
+    "lastIngestedAt": null,
+    "name": "Omniglot – Duala",
+    "url": "https://www.omniglot.com/",
+    "type": "educational",
+    "reliability": "established",
+    "languages": [
+      "dua",
+      "en"
+    ],
+    "accessibility": "restricted",
+    "license": "Copyright Simon Ager. robots.txt (2026-11-14): \"Content-Signal: search=yes,ai-train=no,use=reference\" for all agents, and Disallow: / for ClaudeBot and other AI crawlers.",
+    "notes": "NOT IMPORTED: the site does not allow reuse of its content as input for AI systems beyond reference, and its phrases are not openly licensed. Only robots.txt was read (plus one 404)."
+  },
+  {
+    "id": "ebible-dua",
+    "ingestionStatus": "not_ingested",
+    "lastIngestedAt": null,
+    "name": "eBible.org – parallel Bible texts",
+    "url": "https://ebible.org/Scriptures/translations.csv",
+    "type": "corpus",
+    "reliability": "established",
+    "languages": [],
+    "accessibility": "public",
+    "license": "Per translation (public domain or open licences for many).",
+    "notes": "NOT IMPORTED: the catalogue (1,557 translations, read 2026-11-14) lists no Duala (dua) translation. The historical Duala New Testament (Saker, 1862) is mentioned by Wikipédia but no machine-readable, explicitly free text was found."
   }
 ]

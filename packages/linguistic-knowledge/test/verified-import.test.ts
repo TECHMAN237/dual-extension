@@ -12,10 +12,10 @@ const sources = loadSeedSources();
 const manual = sources.find((s) => s.id === VERIFIED_IMPORT_SOURCE_ID)!;
 const mboasawa = sources.find((s) => s.id === "mboasawa-dictionnaire-duala")!;
 
-describe("pnpm ingest --verified (speaker glossary)", () => {
+describe("pnpm ingest --verified (entries checked by a speaker)", () => {
   it("imports filled rows as verified and skips rows without a Duala translation", async () => {
     const store = new InMemoryKnowledgeStore();
-    const report = await ingestBuffer(Buffer.from(csv), "glossaire.csv", "text/csv", { store, source: manual, sourceLanguage: "fr", format: "csv", verified: true, reviewer: "A.M." });
+    const report = await ingestBuffer(Buffer.from(csv), "verified-by-speaker.csv", "text/csv", { store, source: manual, sourceLanguage: "fr", format: "csv", verified: true, reviewer: "A.M." });
     expect(report.extracted).toBe(1);
     expect(report.warnings.join(" ")).toMatch(/1 row\(s\) without a Duala translation were skipped/);
     const [e] = await store.listEntries({});
@@ -31,7 +31,7 @@ describe("pnpm ingest --verified (speaker glossary)", () => {
 
   it("without --verified the same file is imported as pending", async () => {
     const store = new InMemoryKnowledgeStore();
-    await ingestBuffer(Buffer.from(csv), "glossaire.csv", "text/csv", { store, source: manual, sourceLanguage: "fr", format: "csv" });
+    await ingestBuffer(Buffer.from(csv), "verified-by-speaker.csv", "text/csv", { store, source: manual, sourceLanguage: "fr", format: "csv" });
     const entries = await store.listEntries({});
     expect(entries.every((e) => e.validationStatus === "pending")).toBe(true);
   });
@@ -40,7 +40,7 @@ describe("pnpm ingest --verified (speaker glossary)", () => {
     const store = new InMemoryKnowledgeStore();
     const pending = toEntryInputs([{ sourceText: "accueil", targetText: "T-accueil" }], { source: manual, sourceLanguage: "fr", targetLanguage: "dua" });
     await writeEntriesKeepingReview(store, pending.entries);
-    await ingestBuffer(Buffer.from(csv), "glossaire.csv", "text/csv", { store, source: manual, sourceLanguage: "fr", format: "csv", verified: true });
+    await ingestBuffer(Buffer.from(csv), "verified-by-speaker.csv", "text/csv", { store, source: manual, sourceLanguage: "fr", format: "csv", verified: true });
     const filled = (await store.listEntries({})).filter((e) => e.targetText === "T-accueil");
     expect(filled).toHaveLength(1);
     expect(filled[0]!.validationStatus).toBe("verified");

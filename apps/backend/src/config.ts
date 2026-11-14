@@ -45,7 +45,8 @@ const envSchema = z.object({
 
   /** Knowledge base file. Default data/knowledge/douala.json; relative paths start at the repository root. */
   LOCAL_KNOWLEDGE_FILE: z.string().optional(),
-  SEED_UI_TERMS: bool.default(true),
+  /** Seed the list of interface terms WITHOUT translations (off: they cannot help translating). */
+  SEED_UI_TERMS: bool.default(false),
 });
 
 export type Env = z.infer<typeof envSchema>;
