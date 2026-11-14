@@ -146,58 +146,75 @@ AI_MODEL=google/gemma-4-31b-it
 
 Restart the backend, then run `pnpm ai:test-connection` to confirm the model answers.
 
-## 11. Translation pipeline and `TRANSLATION_MODE`
+## 11. Translation pipeline: word-by-word lookup, then composition
 
-Each segment goes through three layers, in this order:
+The engine translates any French or English text from the Duala **documentation** in `data/knowledge/` (dictionary `douala.json` + grammar sheet `grammaire-douala.md`), not from translations prepared for specific pages. There is no translation mode to configure any more (`TRANSLATION_MODE` was removed).
 
-1. **Direct dictionary (no AI).** If the segment matches **exactly** a knowledge-base entry that has a Duala text, that text is applied directly and the model is not called, even if the entry is still `pending`.
-   - **Normalisation:** case, accents, final punctuation, a leading article (le/la/les/l'/un/une/des/du/the/a/an/to) and a simple plural in -s/-x on words of 5+ letters. For example "Transferts" = "le transfert" and "Payer." = "payer". "Pays" is not reduced to "pay".
-   - **Evidence:**
-     - `high` if the entry is `verified`;
-     - `moderate` if its source reliability is `established` or better;
-     - otherwise `low`.
-   - `needsReview` is true unless the entry is verified, and the reference is attached.
-   - **Several translations:** the most reliable is applied (verified first, then source reliability). The others are listed in `note`.
-2. **Retrieval.** Partial references are found for the model, with these filters:
-   - Function words (le, la, les, de, des, du, un, une, votre, vos, et, à, en, the, a, of, your, to…) never create a reference on their own: a reference must share a content word with the segment.
-   - Overlap matches below 0.5 relevance are dropped.
-   - For a one- or two-word segment, long example sentences are not used unless they match exactly.
-3. **Model**, depending on `TRANSLATION_MODE`:
+For every batch of segments sent by the extension:
 
-| Mode | When the model is called | What it may write | Evidence |
-| --- | --- | --- | --- |
-| `assisted` (default) | Only if at least one **content word** of the segment has a Duala reference (an exact entry for that word, or a reference phrase contained in the segment). Otherwise the original text is kept **without any model call**. | Duala words copied from the references; every other word stays in the source language as a loan, as speakers often do (words without a reference, proper names, brands, technical terms). | at most `low`, `needsReview: true` |
-| `strict` | For every segment not handled by the dictionary layer (original behaviour). | A translation only when the evidence is sufficient; otherwise `null`. | as before |
+1. **Word-by-word lookup** (`packages/linguistic-knowledge/src/lookup.ts`), with one dictionary query for the whole batch.
+   - **Splitting:** each segment is split into words. Elisions (l', d', qu', j', n', s', c', jusqu'…) are separate words, and punctuation is dropped.
+   - **Expressions first:** multi-word expressions of up to 5 words are matched first, the longest first ("s'il te plaît", "le compte rendu").
+   - **Dictionary forms:** each remaining word is reduced to its dictionary form without any dependency (`lemma.ts`). French conjugated verbs become infinitives (consultez → consulter, effectué → effectuer), plurals and feminines become the masculine singular (comptes → compte, chevaux → cheval). English handles -s, -es, -ies, -ing, -ed and common irregular forms. Several candidates are tried; only those that exist in the dictionary are kept.
+   - **Words that are not looked up:**
+     - function words (le, la, de, un, votre, the, of… and the auxiliaries ont, été, was…) stay in the sentence but are not looked up on their own;
+     - numbers stay as they are;
+     - capitalised words inside a sentence and acronyms are treated as names when they are not in the dictionary.
+   - **Entries used:** pending entries are used, since they are the available documentation; the status only affects evidence. Definitions (`contextual_meaning`) are never used as translations.
+2. **Routing** of each segment:
+   - **no content word found** → the original text is kept, **without calling the model**;
+   - **the segment is exactly one dictionary entry** ("Solde", "Ajouter au panier" if it were an entry) → that entry is applied directly, without the model;
+   - **otherwise** → composition by the model.
+3. **Composition** (`packages/translation-engine/src/prompt.ts`).
+   - **System prompt (stable, cacheable):** the instructions, followed by the whole grammar sheet `grammaire-douala.md`.
+   - **Per batch:** one lexicon shared by all segments (each entry once, with short ids `L1`, `L2`…), 2–3 sentence examples from the documentation that contain the words found (they show word order), and each segment with its words and the lexicon ids of each word (none when not found).
+   - **Instructions, in order:**
+     - a) gloss word by word with the lexicon;
+     - b) compose the Duala sentence with the grammar (order, agreement, negation, tense when documented);
+     - c) keep every NOT FOUND word as written, as a loan, and never invent a Duala word;
+     - d) keep names, brands, numbers, amounts and addresses intact.
+   - **No refusal:** the model does not refuse because the documentation is incomplete.
+   - **Output (JSON):** the translation, the glosses (source word, Duala word or null, lexicon id) and the words not found.
+4. **Anti-invention check** (`output.ts`, `checkComposition`). Every word of the translation must be one of:
+   - a Duala word of the lexicon or of the examples sent;
+   - a Duala form of the grammar sheet (the Duala side of its examples and quoted forms with non-French letters);
+   - a word of the source text kept as is.
 
-**Anti-invention check (assisted).** The engine rejects an output in two cases:
-- it contains **no** Duala word from the references given for that segment;
-- it contains a word that is **neither** in the source text **nor** in those references.
+   Otherwise, or when the translation contains no Duala word at all, it is rejected: the segment keeps its original text, with a note.
+5. **Evidence from coverage:** coverage is the share of the segment's content words found in the dictionary.
 
-The comparison is exact: same letters and the same tone marks. A rejected output becomes `uncertain`, and the original text is kept with a note.
+   | Evidence | Coverage |
+   | --- | --- |
+   | `high` | ≥ 80 % with verified entries only |
+   | `moderate` | ≥ 80 % |
+   | `low` | ≥ 30 % |
+   | `unverified` | below 30 % |
 
-**Proper names.** Capitalised words after the first word of a segment ("Safinum **Pay**") are treated as names or brands. They never trigger a translation.
+   `needsReview` is true except for `high`. Each result carries `glosses` (word → Duala text, entry id, status, source page; or not found), `notFound` and `coverage`. The extension shows them.
 
-**Mock provider.** With `AI_PROVIDER=mock` the strict pipeline is always used, so the interface can be exercised with the visible `[MOCK dua] …` placeholders.
+**Mock provider:** `[MOCK dua] …` placeholders, evidence `unverified`, no anti-invention check.
 
-Set the mode in `apps/backend/.env` or on Render (`render.yaml` sets `TRANSLATION_MODE="assisted"`):
+**Reasoning models:** some free models (e.g. Nvidia Nemotron) think before answering. The engine therefore reserves a large output budget (≥ 8,000 tokens) and asks OpenRouter for `reasoning: { effort: "low" }`, which non-reasoning models ignore. With such models, smaller batches (`AI_BATCH_SIZE=4`) are more reliable.
 
-```ini
-TRANSLATION_MODE=assisted   # or strict
-```
-
-### Measuring coverage
+### Measuring coverage and testing a real translation
 
 ```bash
-pnpm coverage:check                                         # data/knowledge/samples/banque.txt, configured mode
-pnpm coverage:check --file my-texts.txt --mode strict       # one text per line
+pnpm coverage:check                                   # every data/knowledge/samples/*.txt (no model call)
+pnpm coverage:check --file my-texts.txt --details     # one text per line, word-by-word detail
+pnpm translate:sample                                 # 10 varied sentences with the configured model (uses the free quota)
 ```
 
-For every line the command prints how it would be handled:
-- **DICTIONNAIRE:** translated directly, with the Duala text;
-- **ASSISTÉ:** the model may translate it, and the words that have a reference are listed;
-- **MODÈLE:** strict mode, the result depends on the model;
-- **ORIGINAL:** the original text is kept.
+`coverage:check` prints, for each file, the share of content words found in the dictionary and how the segments would be handled (direct entry / composed / original kept). It then lists the 30 most frequent words not found, which are what to add to the documentation first. The sample files are real sentences: Wikinews (news), Wikipédia (encyclopedia), the bank page, generic shop labels, and English sentences.
 
-It ends with the percentages. It never calls the model and writes nothing.
+Results on 2026-11-14 (8,940 entries):
 
-On 2026-11-13 the 20 texts of the sample bank page gave **0 %** before and after these changes. The words of that page (solde, frais, banque, bénéficiaire, transfert, compte, paiement, bonjour…) are not in the knowledge base yet. The way forward is a larger documentation (`data/knowledge/`), not the model.
+| File | Words found | Segments composed or translated |
+| --- | --- | --- |
+| actualites.txt | 43.2 % | 19/20 |
+| wikipedia.txt | 38.2 % | 17/20 |
+| boutique.txt | 41.0 % | 11/20 |
+| banque.txt | 23.5 % | 6/20 |
+| anglais.txt | 2.4 % | 2/20 (the English dictionary has only 73 entries) |
+| **total** | **30.7 %** | **55/100** |
+
+Most frequent words not found: solde, frais, paiement, transfert, sécurité, gouvernement, centrale, occidentale, colonisation, indépendance, commande, stock…

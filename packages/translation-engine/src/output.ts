@@ -57,8 +57,8 @@ function reconcile(output: LlmOutput, expectedIds: string[], raw: string): LlmOu
         byId.get(id) ?? {
           id,
           translation: null,
-          evidence: "unverified" as const,
-          usedReferenceIds: [],
+          glosses: [],
+          notFound: [],
           note: "The model did not return a result for this segment.",
         },
     ),
@@ -80,22 +80,64 @@ export function wordTokens(text: string): string[] {
     .filter((t) => t.length > 0 && /\p{L}/u.test(t));
 }
 
+/** Letters that do not occur in French spelling: a quoted form containing one is Duala. */
+const NON_FRENCH = /[^a-zàâäçéèêëîïôöùûüÿœæ'’\s\-.,;!?«»"()0-9]/i;
+
 /**
- * Anti-invention check for ASSISTED translations. The output is accepted only if
- *  - it contains at least one Duala word taken from the references given for the segment, and
- *  - every word is either in the source segment (kept as a loan) or in those references.
- * Elided forms ("l'argent") may be split by the model: their parts are accepted too.
+ * Duala words documented in the grammar sheet: the Duala side (left of " = ") of every
+ * "- Exemple :" line, and quoted forms in the rule text that contain a non-French letter
+ * (tones, ɓ ɗ ɛ ɔ ŋ, macron below…). French glosses in quotes are not included.
  */
-export function checkAssistedTranslation(source: string, translation: string, referenceTargets: string[]): { ok: true; usedTargets: string[] } | { ok: false; reason: string } {
+export function grammarSheetDualaWords(sheet: string): Set<string> {
+  const out = new Set<string>();
+  const add = (s: string) => {
+    for (const w of wordTokens(s)) for (const p of [w, ...w.split("'")]) if (p) out.add(p);
+  };
+  for (const raw of sheet.split(/\r?\n/)) {
+    const line = raw.trim();
+    const example = /^-\s*Exemple\s*:\s*(.+)$/.exec(line);
+    if (example) {
+      for (const part of example[1]!.split(";")) {
+        const left = part.split(" = ")[0] ?? "";
+        for (const m of left.matchAll(/«\s*([^»]+?)\s*»/g)) add(m[1]!);
+      }
+      continue;
+    }
+    if (line.startsWith("- Source") || line.startsWith("#")) continue;
+    for (const m of line.matchAll(/«\s*([^»]+?)\s*»/g)) if (NON_FRENCH.test(m[1]!)) add(m[1]!);
+  }
+  return out;
+}
+
+export type CompositionCheck = { ok: true; dualaWords: string[] } | { ok: false; reason: string };
+
+/**
+ * Anti-invention check for a composed translation. Every word must come from:
+ *  - the Duala texts of the lexicon or the examples given in the request,
+ *  - the Duala forms of the grammar sheet,
+ *  - or the source segment itself (a word kept as a loan).
+ * A translation made only of source words translates nothing and is rejected too.
+ */
+export function checkComposition(source: string, translation: string, allowedDuala: Set<string>): CompositionCheck {
   const sourceWords = new Set(wordTokens(source).flatMap((t) => [t, ...t.split("'")]));
-  const refWords = new Set(referenceTargets.flatMap((r) => wordTokens(r).flatMap((t) => [t, ...t.split("'")])));
   const out = wordTokens(translation);
-  const doualaUsed = out.filter((t) => refWords.has(t) && !sourceWords.has(t));
-  if (doualaUsed.length === 0) return { ok: false, reason: "no Duala word from the references" };
-  const unknown = out.filter((t) => !sourceWords.has(t) && !refWords.has(t) && !t.split("'").every((p) => !p || sourceWords.has(p) || refWords.has(p)));
-  if (unknown.length > 0) return { ok: false, reason: `words not in the source nor in the references: ${[...new Set(unknown)].slice(0, 5).join(", ")}` };
-  const used = referenceTargets.filter((r) => wordTokens(r).some((t) => doualaUsed.includes(t)));
-  return { ok: true, usedTargets: used };
+  const unknown = out.filter((t) => !sourceWords.has(t) && !allowedDuala.has(t) && !t.split("'").every((p) => !p || sourceWords.has(p) || allowedDuala.has(p)));
+  if (unknown.length > 0) return { ok: false, reason: `words neither in the documentation nor in the source text: ${[...new Set(unknown)].slice(0, 5).join(", ")}` };
+  const dualaWords = out.filter((t) => allowedDuala.has(t) && !sourceWords.has(t));
+  if (dualaWords.length === 0) return { ok: false, reason: "no Duala word from the documentation" };
+  return { ok: true, dualaWords };
+}
+
+/**
+ * Evidence from dictionary coverage of the content words:
+ * high ≥ 80 % with verified entries only, moderate ≥ 80 %, low ≥ 30 %, otherwise unverified.
+ */
+export function coverageEvidence(found: number, total: number, allVerified: boolean): "high" | "moderate" | "low" | "unverified" {
+  if (total === 0 || found === 0) return "unverified";
+  const ratio = found / total;
+  if (ratio >= 0.8) return allVerified ? "high" : "moderate";
+  if (ratio >= 0.3) return "low";
+  return "unverified";
 }
 
 /**

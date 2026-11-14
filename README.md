@@ -8,7 +8,7 @@ The long-term vision is to make the internet accessible in African languages; ve
 
 ## Principles
 
-- **No invented Douala.** The knowledge base (`data/knowledge/douala.json`, versioned in Git) contains only entries imported from real dictionary pages (Wiktionary, Mboa Sawa), each with the exact URL of its page, and *zero* fabricated translations. All of them are *pending* until a Duala speaker reviews them. Where no evidence exists the model is instructed to decline rather than guess; declined segments keep their original text and are flagged for review.
+- **No invented Douala.** The knowledge base (`data/knowledge/douala.json`, versioned in Git) contains only entries imported from real sources (Mboa Sawa, Wiktionary, Wikipédia, WALS), each with the exact URL it came from, and *zero* fabricated translations; `data/knowledge/grammaire-douala.md` summarises the documented grammar. All entries are *pending* until a Duala speaker reviews them. The engine looks up each word in this documentation and lets the model compose the sentence with the grammar; words not found stay as written (loans), and an anti-invention check rejects any Duala word that is not in the documentation sent to the model.
 - **Evidence, not fake confidence.** Results are labelled *High / Moderate / Low / Unverified evidence*, derived from the references actually used.
 - **Secrets stay on the server.** The extension never holds an AI key. The backend validates its configuration on startup, rate-limits, validates every input and output, and talks to Anthropic/OpenAI through swappable adapters.
 - **Humans in the loop.** Extracted entries and user corrections are *pending* until a linguist approves them in the admin page.
@@ -83,9 +83,11 @@ douala-ai/
 | `pnpm typecheck` · `pnpm test` · `pnpm build` | Workspace-wide checks |
 | `pnpm ai:test-connection` | Verify the configured AI provider |
 | `pnpm ingest --source <id> --url <url> --lang fr` | Ingest a linguistic resource (see `docs/LINGUISTIC_RESEARCH.md`) |
-| `pnpm ingest:site --site mboasawa\|wiktionary-fr\|wiktionary-en [--dry-run]` | Crawl a dictionary with its dedicated, rate-limited extractor into `data/knowledge/douala.json` |
+| `pnpm ingest:site --site mboasawa-api\|wiktionary-fr\|wiktionary-en\|wikipedia-fr [--dry-run]` | Import a dictionary with its dedicated, rate-limited extractor into `data/knowledge/douala.json` |
 | `pnpm ingest --source manual-linguist-entries --file <list.csv> --lang fr --format csv --verified` | Import entries checked by a Duala speaker as verified (`data/knowledge/README.md`) |
-| `pnpm coverage:check [--file texts.txt] [--mode assisted\|strict]` | Show how each text would be translated (dictionary / assisted / original kept), without calling the model |
+| `pnpm coverage:check [--file texts.txt] [--details]` | Share of words found in the dictionary for the sample texts, and the 30 most frequent words not found (no model call) |
+| `pnpm translate:sample` | Real translation of 10 varied sentences with the configured model: source, glosses, translation, words not found |
+| `pnpm ingest:grammar` | Import the grammar sheet `data/knowledge/grammaire-douala.md` as grammar rules |
 | `pnpm --filter @douala-ai/backend seed` | Seed the source registry into the configured store |
 | `pnpm e2e:live` | Live end-to-end check (built content script + backend, needs Playwright Chromium) |
 | `pnpm e2e:extension` | Loads the real unpacked extension in Chromium and runs Scan, Translate, Restore |

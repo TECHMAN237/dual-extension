@@ -133,6 +133,16 @@ export function TranslatePanel({ session, pageError, busy, sourceLanguage, onSou
               <Chip tone="unverified">{session.evidence.unverified} unverified</Chip>
             </div>
           ) : null}
+          {(translated || status === "error") && (session.wordsTotal ?? 0) > 0 ? (
+            <div className="progress-text" data-testid="dictionary-coverage" title="Content words of the page found in the Duala dictionary (data/knowledge/douala.json)">
+              <span>
+                Mots trouvés dans le dictionnaire : <strong>{Math.round((100 * session.wordsFound) / session.wordsTotal)} %</strong>
+              </span>
+              <span>
+                {session.wordsFound}/{session.wordsTotal}
+              </span>
+            </div>
+          ) : null}
           {status === "error" ? (
             <div style={{ marginTop: 10 }}>
               <Banner tone="error">{session.errorMessage ?? "The translation could not be completed."}</Banner>

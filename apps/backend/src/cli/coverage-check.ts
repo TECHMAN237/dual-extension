@@ -1,22 +1,22 @@
 /**
- * Coverage check: how would each text be handled with the current knowledge base?
- * No model is called and nothing is written.
+ * Dictionary coverage of sample texts, word by word. No model is called and nothing is written.
  *
- *   pnpm coverage:check [--file data/knowledge/samples/banque.txt] [--lang fr|en] [--mode assisted|strict] [--knowledge <file.json>]
+ *   pnpm coverage:check                                   # every data/knowledge/samples/*.txt
+ *   pnpm coverage:check --file my-texts.txt [--lang fr|en] [--details] [--top 30]
  *
- * Routes:
- *   DICTIONNAIRE  exact entry with a Duala text: applied directly, without the model (certain).
- *   ASSISTÉ       assisted mode, at least one content word has a Duala reference: the model may
- *                 translate it (words without reference stay as loans); the anti-invention check
- *                 can still reject its output, so this is "translatable", not "translated".
- *   MODÈLE        strict mode, no exact entry: sent to the model, which returns null when evidence
- *                 is missing (the free model returned null everywhere in production).
- *   ORIGINAL      original text kept (no reference at all, or not translatable).
+ * One text per line; lines starting with "#" are comments. The language is taken from --lang,
+ * or "en" for files named anglais*.txt / english*.txt, otherwise "fr".
+ *
+ * For each file: share of content words found in the dictionary, and how many segments would
+ * be translated directly (one dictionary entry), composed by the model (at least one word
+ * found) or kept in the original (no content word found). At the end: the most frequent words
+ * not found, i.e. what to add to the documentation first.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { InMemoryKnowledgeStore } from "@douala-ai/linguistic-knowledge";
-import { TRANSLATION_MODES, TranslationEngine, type LlmProvider, type SegmentPlan, type TranslationMode } from "@douala-ai/translation-engine";
+import { TranslationEngine, type LlmProvider, type SegmentPlan } from "@douala-ai/translation-engine";
+import { normalizeForLookup } from "@douala-ai/shared";
 import { loadConfig } from "../config";
 import { findRepoRoot } from "../paths";
 
@@ -24,53 +24,58 @@ const arg = (name: string) => {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
-
-const LABEL: Record<SegmentPlan["route"], string> = { dictionary: "DICTIONNAIRE", assisted: "ASSISTÉ", model: "MODÈLE", kept: "ORIGINAL" };
+const flag = (name: string) => process.argv.includes(`--${name}`);
+const pct = (n: number, d: number) => `${d === 0 ? "0.0" : ((100 * n) / d).toFixed(1)} %`;
 
 async function main() {
   const root = findRepoRoot();
-  const file = path.resolve(root, arg("file") ?? "data/knowledge/samples/banque.txt");
-  const lang = (arg("lang") ?? "fr") as "fr" | "en";
+  const samplesDir = path.join(root, "data/knowledge/samples");
+  const files = arg("file") ? [path.resolve(process.env.INIT_CWD ?? process.cwd(), arg("file")!)] : readdirSync(samplesDir).filter((f) => f.endsWith(".txt")).sort().map((f) => path.join(samplesDir, f));
   const config = loadConfig();
-  const mode = (arg("mode") ?? config.engine.translationMode) as TranslationMode;
-  if (!(TRANSLATION_MODES as readonly string[]).includes(mode)) throw new Error(`--mode must be one of ${TRANSLATION_MODES.join(", ")}`);
   const knowledgeFile = arg("knowledge") ? path.resolve(root, arg("knowledge")!) : config.knowledgeFile;
-
   const store = new InMemoryKnowledgeStore({ persistPath: knowledgeFile, readOnly: true });
   await store.load();
-  // The model is never called by plan(); this provider fails loudly if it ever were.
-  const provider: LlmProvider = {
-    name: "coverage-check",
-    complete: async () => {
-      throw new Error("coverage:check must not call the model");
-    },
-  };
-  const engine = new TranslationEngine({ config: { ...config.engine, translationMode: mode }, provider, store });
+  // plan() never calls the model; this provider fails loudly if it ever were.
+  const provider: LlmProvider = { name: "coverage-check", complete: async () => { throw new Error("coverage:check must not call the model"); } };
+  const engine = new TranslationEngine({ config: config.engine, provider, store });
+  const top = Number(arg("top") ?? 30);
 
-  const texts = readFileSync(file, "utf8").split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-  const plan = await engine.plan(texts, lang);
-
-  console.log(`Base : ${path.relative(root, knowledgeFile)} (${await store.countEntries()} entrées) · mode : ${mode} · textes : ${path.relative(root, file)}\n`);
-  const width = Math.min(60, Math.max(...plan.map((p) => p.text.length)));
-  for (const p of plan) {
-    const detail =
-      p.route === "dictionary"
-        ? `→ ${p.translation} (${p.evidence})`
-        : p.route === "assisted"
-          ? `mots avec référence : ${p.anchors.map((a) => `${a.word} → ${a.duala}`).join(", ")}`
-          : "";
-    console.log(`${LABEL[p.route].padEnd(12)} ${p.text.slice(0, 60).padEnd(width)}  ${detail}`);
+  console.log(`Documentation : ${path.relative(root, knowledgeFile)} (${await store.countEntries()} entrées)\n`);
+  const missing = new Map<string, { count: number; lang: string }>();
+  const totals = { found: 0, words: 0, segments: 0, dictionary: 0, compose: 0, kept: 0 };
+  for (const file of files) {
+    const name = path.basename(file);
+    const lang = (arg("lang") ?? (/^(anglais|english)/i.test(name) ? "en" : "fr")) as "fr" | "en";
+    const texts = readFileSync(file, "utf8").split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith("#"));
+    const plan: SegmentPlan[] = await engine.plan(texts, lang);
+    const found = plan.reduce((n, p) => n + p.lookup.found, 0);
+    const words = plan.reduce((n, p) => n + p.lookup.total, 0);
+    const count = (r: SegmentPlan["route"]) => plan.filter((p) => p.route === r).length;
+    totals.found += found;
+    totals.words += words;
+    totals.segments += plan.length;
+    totals.dictionary += count("dictionary");
+    totals.compose += count("compose");
+    totals.kept += count("kept");
+    console.log(`${name} (${lang}, ${plan.length} textes) : mots trouvés ${found}/${words} = ${pct(found, words)} · dictionnaire direct ${count("dictionary")} · composés par l'IA ${count("compose")} · originaux conservés ${count("kept")}`);
+    for (const p of plan) {
+      for (const it of p.lookup.items) {
+        if (it.kind !== "not_found") continue;
+        const key = normalizeForLookup(it.surface);
+        const m = missing.get(key) ?? { count: 0, lang };
+        m.count++;
+        missing.set(key, m);
+      }
+      if (flag("details")) {
+        const detail = p.lookup.items.map((it) => (it.kind === "found" ? `${it.surface}→${it.entries[0]!.targetText}` : it.kind === "not_found" ? `[${it.surface}?]` : it.surface)).join(" ");
+        console.log(`   ${p.route.padEnd(10)} ${p.lookup.found}/${p.lookup.total}  ${detail}`);
+      }
+    }
   }
-  const count = (r: SegmentPlan["route"]) => plan.filter((p) => p.route === r).length;
-  const pct = (n: number) => `${((100 * n) / Math.max(plan.length, 1)).toFixed(1)} %`;
-  const dict = count("dictionary");
-  const assisted = count("assisted");
-  console.log("");
-  console.log(`Dictionnaire direct (traduit, sans modèle) : ${dict}/${plan.length} (${pct(dict)})`);
-  if (mode === "assisted") console.log(`Assisté (traduisible par le modèle, sous contrôle anti-invention) : ${assisted}/${plan.length} (${pct(assisted)})`);
-  else console.log(`Envoyés au modèle en mode strict (résultat incertain) : ${count("model")}/${plan.length} (${pct(count("model"))})`);
-  console.log(`Texte original conservé : ${count("kept")}/${plan.length} (${pct(count("kept"))})`);
-  console.log(`COUVERTURE (dictionnaire + assisté) : ${pct(dict + assisted)}`);
+  console.log(`\nTOTAL : mots trouvés ${totals.found}/${totals.words} = ${pct(totals.found, totals.words)} · segments ${totals.segments} : dictionnaire direct ${totals.dictionary}, composés ${totals.compose}, originaux ${totals.kept} (${pct(totals.dictionary + totals.compose, totals.segments)} traduisibles)`);
+  const ranked = [...missing.entries()].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0])).slice(0, top);
+  console.log(`\n${ranked.length} mots non trouvés les plus fréquents (à ajouter à la documentation) :`);
+  console.log(ranked.map(([w, m]) => `${w} (${m.count}${m.lang === "en" ? ", en" : ""})`).join(", "));
 }
 
 void main().catch((err) => {

@@ -47,7 +47,7 @@ describe("public API", () => {
       method: "POST",
       url: "/api/translate/batch",
       headers,
-      payload: { sourceLanguage: "en", domain: "example.com", items: [{ id: "n1", text: "Search", context: "button" }, { id: "n2", text: "Read the latest news", context: "link" }, { id: "n3", text: "user_id", context: "other" }] },
+      payload: { sourceLanguage: "en", domain: "example.com", items: [{ id: "n1", text: "Search", context: "button" }, { id: "n2", text: "Search the latest news", context: "link" }, { id: "n3", text: "user_id", context: "other" }] },
     });
     expect(res.statusCode).toBe(200);
     const body = res.json();
@@ -62,7 +62,7 @@ describe("public API", () => {
 
     const hist = await app.inject({ method: "GET", url: "/api/history", headers });
     expect(hist.json().history[0]).toMatchObject({ domain: "example.com", sourceLanguage: "en", translatedCount: 2, status: "completed" });
-    expect(JSON.stringify(hist.json())).not.toContain("Read the latest news");
+    expect(JSON.stringify(hist.json())).not.toContain("Search the latest news");
   });
 
   it("POST /api/translate handles a single segment", async () => {
@@ -193,9 +193,10 @@ describe("provider failures", () => {
         throw new ProviderError("Anthropic authentication failed: check AI_API_KEY", { retryable: false, status: 401, provider: "anthropic" });
       },
     };
-    // Strict mode: the segment without evidence goes to the (failing) model; in assisted mode it would be kept without a call.
-    const { app } = await makeApp({ provider: failing, env: { TRANSLATION_MODE: "strict" }, entries: [fakeEntry({ sourceText: "Search", targetText: "T:search" })] });
-    const res = await app.inject({ method: "POST", url: "/api/translate/batch", headers, payload: { sourceLanguage: "en", items: [{ id: "a", text: "Search" }, { id: "b", text: "Something else entirely" }] } });
+    // "Search" is one dictionary entry (applied without the model); "Search something else" has a
+    // found word plus unknown ones, so it goes to the (failing) model.
+    const { app } = await makeApp({ provider: failing, entries: [fakeEntry({ sourceText: "Search", targetText: "T:search" })] });
+    const res = await app.inject({ method: "POST", url: "/api/translate/batch", headers, payload: { sourceLanguage: "en", items: [{ id: "a", text: "Search" }, { id: "b", text: "Search something else" }] } });
     expect(res.statusCode).toBe(200);
     const byId = Object.fromEntries(res.json().results.map((r: { id: string }) => [r.id, r]));
     expect(byId.a.status).toBe("translated");

@@ -3,15 +3,7 @@ import { z } from "zod";
 export const PROVIDER_NAMES = ["anthropic", "openai", "openrouter", "mock"] as const;
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 
-/**
- * strict:   the model translates only with sufficient evidence, otherwise returns null.
- * assisted: the model may translate a segment when at least one content word has a Duala
- *           reference; words without a reference stay in French/English (loans). Every output
- *           is checked against the references (no Duala word that is not in them).
- * In both modes an exact dictionary match is applied directly, without the model.
- */
-export const TRANSLATION_MODES = ["strict", "assisted"] as const;
-export type TranslationMode = (typeof TRANSLATION_MODES)[number];
+
 
 /**
  * Engine configuration. Built from environment variables by the backend
@@ -43,8 +35,6 @@ export const engineConfigSchema = z.object({
   effort: z.enum(["low", "medium", "high"]).default("low"),
   /** Enable the Anthropic server-side refusal fallback (beta). */
   anthropicServerFallback: z.boolean().default(true),
-  /** See TRANSLATION_MODES. */
-  translationMode: z.enum(TRANSLATION_MODES).default("assisted"),
 });
 export type EngineConfig = z.infer<typeof engineConfigSchema>;
 

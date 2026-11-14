@@ -40,10 +40,6 @@ services:
         value: google/gemma-4-26b-a4b-it:free
       - key: AI_BASE_URL
         value: https://openrouter.ai/api/v1
-      # assisted: dictionary entries applied directly + model only with Duala references
-      # (anti-invention check). strict: null whenever evidence is missing. See docs/AI_CONFIGURATION.md.
-      - key: TRANSLATION_MODE
-        value: "assisted"
       # --- Storage: the knowledge base ships with the code -------------------------
       # data/knowledge/douala.json is versioned in Git and loaded at startup. Writes made on
       # the server (admin approvals, corrections) stay in memory and are lost on restart:

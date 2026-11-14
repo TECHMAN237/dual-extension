@@ -1,0 +1,21 @@
+# Libellés courants de boutique en ligne (interface générique : panier, livraison, paiement), écrits pour ce test ; aucun texte de boutique sous licence libre n'a été trouvé.
+Ajouter au panier
+Voir le panier
+Votre panier est vide
+Continuer mes achats
+Passer la commande
+Livraison gratuite dès 50 euros
+Paiement sécurisé
+Retour gratuit sous 30 jours
+Nouveautés
+Meilleures ventes
+En stock
+Rupture de stock
+Choisir une taille
+Prix total
+Code promo
+Suivre ma commande
+Mes commandes
+Laisser un avis
+Produits similaires
+Merci pour votre achat

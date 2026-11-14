@@ -4,6 +4,19 @@ import type { AppConfig } from "./config";
 import { createMemoryRepositories } from "./repositories/memory";
 import { createSupabaseRepositories } from "./repositories/supabase";
 import type { Repositories } from "./repositories/types";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { findRepoRoot } from "./paths";
+
+/** The grammar sheet included in every translation prompt (data/knowledge/grammaire-douala.md). */
+export const GRAMMAR_SHEET_FILE = "data/knowledge/grammaire-douala.md";
+export function loadGrammarSheet(): string {
+  try {
+    return readFileSync(path.join(findRepoRoot(), GRAMMAR_SHEET_FILE), "utf8");
+  } catch {
+    return "";
+  }
+}
 
 export interface Container {
   config: AppConfig;
@@ -61,6 +74,7 @@ export async function createContainer(config: AppConfig, overrides: ContainerOve
     config: config.engine,
     provider,
     store,
+    grammarSheet: loadGrammarSheet(),
     logger: overrides.logger,
     onUsage: (event) => {
       void usage.record({ clientId: null, ...event }).catch(() => {});

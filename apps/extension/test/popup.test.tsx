@@ -24,6 +24,8 @@ function snapshot(partial: Partial<SessionSnapshot> = {}): SessionSnapshot {
     errorCount: 0,
     completedCount: 0,
     evidence: { high: 0, moderate: 0, low: 0, unverified: 0 },
+    wordsFound: 0,
+    wordsTotal: 0,
     mock: false,
     provider: null,
     model: null,
@@ -34,7 +36,7 @@ function snapshot(partial: Partial<SessionSnapshot> = {}): SessionSnapshot {
   };
 }
 
-function mockBackground(state: { session: SessionSnapshot }) {
+function mockBackground(state: { session: SessionSnapshot; translations?: unknown[] }) {
   const sendMessage = chrome.runtime.sendMessage as unknown as ReturnType<typeof vi.fn>;
   sendMessage.mockImplementation(async (message: { type: string; sourceLanguage?: string }) => {
     switch (message.type) {
@@ -50,7 +52,7 @@ function mockBackground(state: { session: SessionSnapshot }) {
         state.session = snapshot();
         return { ok: true, data: state.session };
       case "LIST_TRANSLATIONS":
-        return { ok: true, data: [] };
+        return { ok: true, data: state.translations ?? [] };
       default:
         return { ok: true, data: null };
     }
@@ -194,6 +196,33 @@ describe("popup", () => {
     await waitFor(() => expect(screen.getByTestId("progress-panel")).toHaveTextContent("Translation complete"));
     expect(screen.queryByTestId("wake-notice")).toBeNull();
   }, 12_000);
+
+  it("shows the share of words found in the dictionary after a translation", async () => {
+    mockFetchHealth();
+    mockBackground({ session: snapshot({ status: "translated", totalSegments: 4, requestedCount: 4, completedCount: 4, translatedCount: 3, wordsFound: 30, wordsTotal: 40 }) });
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId("dictionary-coverage")).toHaveTextContent("Mots trouvés dans le dictionnaire : 75 %"));
+    expect(screen.getByTestId("dictionary-coverage")).toHaveTextContent("30/40");
+  });
+
+  it("shows the word-by-word detail of each segment in the Corrections tab", async () => {
+    mockFetchHealth();
+    const gloss = (source: string, duala: string | null, kind: "found" | "not_found" | "function_word") => ({ source, lemma: kind === "found" ? source.toLowerCase().replace("consultez", "consulter") : null, duala, entryId: duala ? "e1" : null, status: duala ? "pending" : null, sourceName: duala ? "Mboa Sawa" : null, reference: duala ? "https://example.org/w" : null, kind });
+    mockBackground({
+      session: snapshot({ status: "translated", totalSegments: 1, requestedCount: 1, completedCount: 1, translatedCount: 1, wordsFound: 1, wordsTotal: 2 }),
+      translations: [
+        { id: "s1", sourceText: "Consultez votre solde", translatedText: "D-consulte solde", status: "translated", evidence: "low", needsReview: true, references: [], note: null, context: "button", coverage: { found: 1, total: 2 }, notFound: ["solde"], glosses: [gloss("Consultez", "D-consulte", "found"), gloss("votre", null, "function_word"), gloss("solde", null, "not_found")] },
+      ],
+    });
+    render(<App />);
+    await userEvent.click(await screen.findByRole("tab", { name: "Corrections" }));
+    const detail = await screen.findByTestId("word-glosses");
+    expect(detail).toHaveTextContent("Mot à mot · 1/2 trouvés");
+    expect(detail).toHaveTextContent("Consultez → D-consulte");
+    expect(detail).toHaveTextContent("forme : consulter");
+    expect(detail).toHaveTextContent("solde → non trouvé");
+    expect(detail).not.toHaveTextContent("votre");
+  });
 
   it("applies PROGRESS messages from the content script", async () => {
     mockFetchHealth();

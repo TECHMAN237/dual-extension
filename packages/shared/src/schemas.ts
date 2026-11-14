@@ -119,6 +119,28 @@ export const translationStatusSchema = z.enum([
 ]);
 export type TranslationStatus = z.infer<typeof translationStatusSchema>;
 
+/** One word (or multi-word expression) of a segment and what the dictionary says about it. */
+export const wordGlossSchema = z.object({
+  /** The word or expression as written in the segment. */
+  source: z.string(),
+  /** Dictionary form that matched ("consultez" → "consulter"), null when not found. */
+  lemma: z.string().nullable(),
+  /** Duala text used for this word, null when not found. */
+  duala: z.string().nullable(),
+  entryId: z.string().nullable(),
+  status: z.enum(["pending", "verified", "rejected"]).nullable(),
+  sourceName: z.string().nullable(),
+  /** URL of the dictionary page the Duala text comes from. */
+  reference: z.string().nullable(),
+  /** found / not_found count for coverage; function words, names and numbers do not. */
+  kind: z.enum(["found", "not_found", "function_word", "name", "number"]),
+});
+export type WordGloss = z.infer<typeof wordGlossSchema>;
+
+/** Content words of a segment found in the dictionary. */
+export const coverageSchema = z.object({ found: z.number().int().min(0), total: z.number().int().min(0) });
+export type Coverage = z.infer<typeof coverageSchema>;
+
 export const translationResultSchema = z.object({
   id: z.string(),
   sourceText: z.string(),
@@ -132,6 +154,12 @@ export const translationResultSchema = z.object({
   note: z.string().nullable(),
   /** Whether the result came from cache. */
   cached: z.boolean().default(false),
+  /** Word-by-word detail: each word with its Duala text, or not found. */
+  glosses: z.array(wordGlossSchema).optional(),
+  /** Content words absent from the dictionary (kept as written in the translation). */
+  notFound: z.array(z.string()).optional(),
+  /** Content words found in the dictionary / content words. Null when not computed. */
+  coverage: coverageSchema.nullable().optional(),
 });
 export type TranslationResult = z.infer<typeof translationResultSchema>;
 

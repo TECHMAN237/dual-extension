@@ -22,6 +22,7 @@
     "ingest:site": "pnpm --filter @douala-ai/backend ingest:site",
     "ingest:grammar": "pnpm --filter @douala-ai/backend ingest:grammar",
     "coverage:check": "pnpm --filter @douala-ai/backend coverage:check",
+    "translate:sample": "pnpm --filter @douala-ai/backend translate:sample",
     "ai:test-connection": "pnpm --filter @douala-ai/backend ai:test-connection",
     "e2e:live": "node scripts/e2e-live.mjs",
     "verify": "bash scripts/verify.sh",

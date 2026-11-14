@@ -46,6 +46,9 @@ export class OpenRouterProvider implements LlmProvider {
           ],
           max_tokens: req.maxTokens,
           response_format: { type: "json_object" },
+          // Reasoning models spend max_tokens on reasoning first; keep it short so the JSON
+          // answer is not cut off (an empty answer). Ignored by non-reasoning models.
+          ...({ reasoning: { effort: "low" } } as Record<string, unknown>),
         },
         { timeout: req.timeoutMs },
       );

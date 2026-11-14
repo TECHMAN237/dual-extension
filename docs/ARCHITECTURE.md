@@ -35,16 +35,31 @@ Dependency direction: `extension → shared`, `backend → engine → knowledge 
 
 ## Translation pipeline (backend)
 
+The engine translates from a **documentation** of Duala (`data/knowledge/douala.json` + `data/knowledge/grammaire-douala.md`), word by word, then lets the model compose the sentence. Details: `docs/AI_CONFIGURATION.md` §11.
+
 1. **Validate** the request (`translateBatchRequestSchema`): ≤60 items, ≤20k chars, unique ids.
 2. **Resolve the source language**: explicit, or stop-word detection over the whole batch (`detectSourceLanguage`).
 3. **Normalise** whitespace and **skip** untranslatable items (URLs, emails, numbers, identifiers) → `status: skipped`.
 4. **De-duplicate** identical `(text, context)` pairs and check the **cache** (LRU + TTL).
-5. **Retrieve references** for each remaining item (`retrieveReferences`): candidates from the store → lexical scoring (exact / sub-phrase / overlap) × quality (validation status, origin, reliability) → top-N.
-6. **Short-circuit**: an exact, *verified* reference with a target is applied directly (case-matched) with evidence `high`, no model call.
-7. **Route**: remaining items are partitioned into `fast` and `capable` batches (`router.ts`) and sent concurrently through the provider adapter with timeout, retry/backoff, malformed-output retry and fallback model.
-8. **Validate** the structured output (Zod) and each translation (`validateTranslationText`).
-9. **Derive evidence**: the model's claimed level is capped by what the references actually support (`deriveEvidenceLevel`); `needsReview` is set for `low`/`unverified`; declined items become `uncertain` and keep the original text.
+5. **Word-by-word lookup** (`linguistic-knowledge/src/lookup.ts`, one dictionary query per batch):
+   - split into words (elisions separate, punctuation dropped);
+   - match multi-word expressions first (longest first), then each word through its dictionary-form candidates (`lemma.ts`: infinitive, singular, masculine; English -s/-ing/-ed);
+   - function words, numbers and names are kept but not looked up;
+   - each word gets its Duala translations (entry id, status, source page) or "not found". Pending entries are usable; definitions never are.
+6. **Route**:
+   - no content word found → original kept, no model call;
+   - the whole segment is one dictionary entry → applied directly;
+   - otherwise → composition.
+7. **Compose**:
+   - **batches:** items are partitioned into `fast` and `capable` batches (`router.ts`);
+   - **system prompt:** instructions + the whole grammar sheet (stable, cacheable);
+   - **user prompt:** one shared lexicon for the batch, 2–3 sentence examples containing the words, and each segment with its words and lexicon ids;
+   - **resilience:** timeout, retry/backoff, malformed-output retry and fallback model.
+8. **Validate** the structured output (Zod), protected tokens (`validateTranslationText`) and the **anti-invention check** (`checkComposition`). Every word must come from the lexicon, the examples, the grammar sheet or the source text (a loan); otherwise the original text is kept with a note.
+9. **Evidence from coverage** (content words found / content words): high ≥ 80 % with verified entries, moderate ≥ 80 %, low ≥ 30 %, else unverified. `needsReview` unless high. Results carry `glosses`, `notFound` and `coverage`.
 10. **Assemble** results in request order, fan out duplicates, cache successes, record history/usage.
+
+The extension shows "Mots trouvés dans le dictionnaire : X %" for the page after a translation, and the word-by-word detail of each segment in the Corrections tab.
 
 ## Knowledge model
 

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { ConfigError, describeConfig, loadConfig } from "../src/config";
 import { testEnv } from "./helpers";
+import { loadGrammarSheet } from "../src/container";
 
 /** Minimal KEY=VALUE parser matching Node's --env-file for our example files (empty values stay ""). */
 function readEnvFile(relativePath: string): Record<string, string> {
@@ -86,13 +87,12 @@ describe("loadConfig", () => {
   it("rejects mock provider and missing admin token in production", () => {
     expect(() => loadConfig({ NODE_ENV: "production", AI_PROVIDER: "mock" })).toThrow(/production/);
   });
-  it("TRANSLATION_MODE defaults to assisted, accepts strict and rejects anything else", () => {
-    expect(loadConfig(testEnv()).engine.translationMode).toBe("assisted");
-    expect(loadConfig(testEnv({ TRANSLATION_MODE: "strict" })).engine.translationMode).toBe("strict");
-    expect(() => loadConfig(testEnv({ TRANSLATION_MODE: "creative" }))).toThrow(ConfigError);
+  it("no translation mode any more: the word-by-word pipeline is the only one, and the grammar sheet is loaded", () => {
     const yaml = readFileSync(fileURLToPath(new URL("../../../render.yaml", import.meta.url)), "utf8");
-    expect(yaml).toMatch(/- key: TRANSLATION_MODE\n\s+value: "assisted"/);
-    expect(describeConfig(loadConfig(testEnv()))).toMatchObject({ translationMode: "assisted" });
+    expect(yaml).not.toContain("TRANSLATION_MODE");
+    expect(describeConfig(loadConfig(testEnv()))).not.toHaveProperty("translationMode");
+    const sheet = loadGrammarSheet();
+    expect(sheet).toContain("### G17 · Ordre des mots");
   });
   it("requires Supabase in production unless ephemeral storage is explicitly allowed", () => {
     const prod = { NODE_ENV: "production", AI_PROVIDER: "openrouter", AI_API_KEY: "sk-or-test", ADMIN_API_TOKEN: "admin" };

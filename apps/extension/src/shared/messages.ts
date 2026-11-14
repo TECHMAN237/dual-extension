@@ -13,6 +13,8 @@ import type {
   TranslateBatchResponse,
   TranslationReference,
   TranslationStatus,
+  Coverage,
+  WordGloss,
 } from "@douala-ai/shared";
 
 /* ------------------------------------------------------------------------- */
@@ -47,6 +49,9 @@ export interface SessionSnapshot {
   errorCount: number;
   completedCount: number;
   evidence: EvidenceCounts;
+  /** Content words of the translated segments found in the Duala dictionary / content words. */
+  wordsFound: number;
+  wordsTotal: number;
   mock: boolean;
   provider: string | null;
   model: string | null;
@@ -81,6 +86,10 @@ export interface TranslatedSegmentInfo {
   references: TranslationReference[];
   note: string | null;
   context: SegmentContext;
+  /** Word-by-word detail: each word → Duala text, or not found. */
+  glosses: WordGloss[];
+  notFound: string[];
+  coverage: Coverage | null;
 }
 
 export interface SessionSummary {

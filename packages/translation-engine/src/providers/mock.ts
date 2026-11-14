@@ -1,14 +1,10 @@
 import type { CompletionRequest, CompletionResponse, LlmProvider } from "./types";
-import { promptItemsSchema } from "../prompt";
 
 /**
  * Clearly-labelled mock provider for UI and integration testing WITHOUT an API key.
- *
- * Behaviour:
- *  - If a reference with an exact, verified translation is supplied for an item,
- *    the mock returns that reference translation (evidence: high).
- *  - Otherwise it returns a visibly fake placeholder `[MOCK dua] <original text>`
- *    marked as `unverified`, so nobody mistakes it for real Douala.
+ * It returns a visibly fake placeholder `[MOCK dua] <original text>` for every segment, with the
+ * glosses the engine sent, so nobody mistakes it for real Douala. (The engine skips the
+ * anti-invention check and reports "unverified" evidence for the mock provider.)
  */
 export class MockProvider implements LlmProvider {
   readonly name = "mock";
@@ -23,16 +19,19 @@ export class MockProvider implements LlmProvider {
     }
     const start = req.user.indexOf("<items>");
     const end = req.user.indexOf("</items>");
-    const payload = start >= 0 && end > start ? req.user.slice(start + "<items>".length, end) : "[]";
-    const parsed = promptItemsSchema.safeParse(JSON.parse(payload));
-    const items = parsed.success ? parsed.data : [];
-    const out = items.map((item) => {
-      const exact = item.references.find((r) => r.match === "exact" && r.target && r.status === "verified");
-      if (exact) {
-        return { id: item.id, translation: exact.target, evidence: "high", usedReferenceIds: [exact.id], note: null };
-      }
-      return { id: item.id, translation: `[MOCK dua] ${item.text}`, evidence: "unverified", usedReferenceIds: [], note: "Mock provider: placeholder output, not Douala." };
-    });
+    let items: { id: string; text: string; words?: { word: string; lex: string[] }[] }[] = [];
+    try {
+      items = start >= 0 && end > start ? JSON.parse(req.user.slice(start + "<items>".length, end)) : [];
+    } catch {
+      items = [];
+    }
+    const out = items.map((item) => ({
+      id: item.id,
+      translation: `[MOCK dua] ${item.text}`,
+      glosses: [],
+      notFound: (item.words ?? []).filter((w) => w.lex.length === 0).map((w) => w.word),
+      note: "Mock provider: placeholder output, not Douala.",
+    }));
     return { text: JSON.stringify({ items: out }), model: req.model, stopReason: "end_turn" };
   }
 }

@@ -240,6 +240,10 @@ export class PageSession {
 
   private applyResult(seg: Segment, result: TranslationResult): void {
     this.state.completedCount += 1;
+    if (result.coverage) {
+      this.state.wordsFound += result.coverage.found;
+      this.state.wordsTotal += result.coverage.total;
+    }
     this.records.set(seg.id, { segment: seg, result });
     if (result.status === "translated" && result.translatedText) {
       const applied = this.observer.ignoreOwnMutations(() => this.registry.apply(seg, result.translatedText!, result));
@@ -317,6 +321,9 @@ export class PageSession {
         references: rec.result.references,
         note: rec.result.note,
         context: rec.segment.context,
+        glosses: rec.result.glosses ?? [],
+        notFound: rec.result.notFound ?? [],
+        coverage: rec.result.coverage ?? null,
       });
     }
     return out;

@@ -41,13 +41,17 @@ Typecheck: clean in all five projects. Builds: `apps/backend/dist` (tsup, ~110 K
 - Evidence derivation: high (exact verified), moderate (exact, established unverified), unverified (no target).
 - Ingestion: CSV with empty targets, HTML tables / definition lists / custom selectors (scripts ignored), JSON arrays and `{entries}`, "word — gloss" lines, provenance + pending status + duplicate removal, robots.txt evaluation.
 - Seed data: the four resources from the research email are registered; **every seeded term has a null target** (no invented Douala).
+- Word-by-word lookup (`lookup.test.ts`): French infinitives and singulars (consultez → consulter, comptes → compte, chevaux → cheval), English -s/-ies/-ing/-ed and irregular forms, elisions (l', c', qu', jusqu'), multi-word expressions longest first, function words kept but not looked up, names and acronyms, definitions never used, sentence examples found for the words.
+- Dictionary sources: Mboa Sawa REST extract, gloss cleaning, Wiktionary translation tables, Wikipédia tables, grammar sheet parsing (every rule cites an https source).
 
 ### Translation engine (`packages/translation-engine/test`)
-- Verified exact references short-circuit the model with high evidence and references attached.
+- No content word found → original kept without calling the model; a whole-segment dictionary entry is applied directly (pending usable; evidence high only when verified).
+- Composition: system prompt = instructions + grammar sheet; one shared lexicon per batch; glosses, not-found words and coverage in the result.
+- Anti-invention: a Duala word absent from the lexicon/examples/grammar sheet rejects the translation; grammar-sheet Duala forms are accepted, French glosses are not.
+- Evidence from coverage (high/moderate/low/unverified thresholds).
 - Skips untranslatable items, de-duplicates identical texts, caches results (second call makes no provider request).
 - Auto-detects French.
 - Recovers from one malformed output by retrying; reports provider errors per item; retries only retryable errors (429) up to `maxRetries`; uses the fallback model when the primary fails.
-- Caps model-claimed evidence by actual reference support.
 - Output parser (fences, missing ids), translation validator (placeholders preserved), router tiers, case matching, retry policy.
 
 ### Backend (`apps/backend/test`)

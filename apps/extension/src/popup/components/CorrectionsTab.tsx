@@ -54,6 +54,42 @@ function SegmentItem({ seg, session, onSubmitted, enabled }: { seg: TranslatedSe
         </div>
       </div>
       {seg.note ? <div className="item-meta">{seg.note}</div> : null}
+      {seg.glosses.some((g) => g.kind === "found" || g.kind === "not_found") ? (
+        <details className="references" data-testid="word-glosses">
+          <summary>
+            Mot à mot{seg.coverage ? ` · ${seg.coverage.found}/${seg.coverage.total} trouvés` : ""}
+          </summary>
+          <ul className="glosses">
+            {seg.glosses
+              .filter((g) => g.kind === "found" || g.kind === "not_found")
+              .map((g, i) => (
+                <li key={`${g.source}-${i}`} className={`gloss gloss--${g.kind}`}>
+                  <strong>{g.source}</strong> →{" "}
+                  {g.kind === "found" ? (
+                    <>
+                      {g.duala}
+                      <span className="ref-name">
+                        {" "}
+                        ({[g.sourceName, g.status, g.lemma && g.lemma !== g.source.toLowerCase() ? `forme : ${g.lemma}` : null].filter(Boolean).join(" · ")}
+                        {g.reference ? (
+                          <>
+                            {" · "}
+                            <a href={g.reference} target="_blank" rel="noreferrer">
+                              source
+                            </a>
+                          </>
+                        ) : null}
+                        )
+                      </span>
+                    </>
+                  ) : (
+                    <em>non trouvé</em>
+                  )}
+                </li>
+              ))}
+          </ul>
+        </details>
+      ) : null}
       {seg.references.length > 0 ? (
         <details className="references">
           <summary>

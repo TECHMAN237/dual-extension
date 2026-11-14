@@ -66,8 +66,13 @@ export const FUNCTION_WORDS: ReadonlySet<string> = new Set([
   "mon", "ma", "mes", "ton", "ta", "tes", "son", "sa", "ses", "notre", "nos", "votre", "vos", "leur", "leurs",
   // fr: pronouns
   "je", "j", "tu", "il", "elle", "on", "nous", "ils", "elles", "me", "m", "te", "t", "se", "s", "lui", "y", "en", "qui", "que", "qu", "quoi", "dont", "ou",
+  "jusqu", "jusque", "lorsqu", "lorsque", "puisqu", "puisque", "quoiqu", "quoique",
   // fr: prepositions, conjunctions, common particles
   "a", "et", "dans", "par", "pour", "sur", "sous", "avec", "sans", "chez", "vers", "entre", "mais", "donc", "or", "ni", "car", "si", "ne", "n", "pas", "plus", "tres", "tout", "toute", "tous", "toutes", "est", "sont",
+  // fr: auxiliaries of compound tenses ("ont été observés"): grammar, not vocabulary
+  "ai", "as", "avons", "avez", "ont", "avait", "avaient", "aura", "auront", "ete", "etait", "etaient", "sera", "seront", "suis", "sommes", "etes",
+  // en: auxiliaries and modals
+  "was", "were", "been", "has", "have", "had", "will", "would", "shall", "should", "can", "could", "may", "might", "must", "do", "does", "did",
   // en
   "the", "an", "of", "to", "in", "on", "at", "by", "for", "from", "with", "and", "or", "but", "your", "yours", "my", "our", "their", "his", "her", "its", "this", "that", "these", "those", "it", "is", "are", "be", "as", "into", "you", "we", "they", "i",
 ]);

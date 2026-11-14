@@ -26,6 +26,8 @@ export function createInitialState(): SessionState {
     errorCount: 0,
     completedCount: 0,
     evidence: emptyEvidence(),
+    wordsFound: 0,
+    wordsTotal: 0,
     mock: false,
     provider: null,
     model: null,
@@ -43,6 +45,8 @@ export function resetCounts(state: SessionState): void {
   state.errorCount = 0;
   state.completedCount = 0;
   state.evidence = emptyEvidence();
+  state.wordsFound = 0;
+  state.wordsTotal = 0;
   state.errorMessage = null;
 }
 
